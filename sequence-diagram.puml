@@ -1,0 +1,385 @@
+@startuml Sequence_PhanCongHuongDanVien
+
+' ==============================
+' THEME
+' ==============================
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 200
+
+skinparam participant {
+    BackgroundColor #DBEAFE
+    BorderColor     #1D4ED8
+    FontColor       #1E293B
+    FontStyle       bold
+}
+skinparam actor {
+    BackgroundColor #FEF3C7
+    BorderColor     #D97706
+    FontColor       #1E293B
+}
+skinparam database {
+    BackgroundColor #D1FAE5
+    BorderColor     #059669
+    FontColor       #1E293B
+}
+skinparam boundary {
+    BackgroundColor #EDE9FE
+    BorderColor     #7C3AED
+}
+skinparam note {
+    BackgroundColor #FFFBEB
+    BorderColor     #F59E0B
+}
+
+' ==============================
+' PARTICIPANTS
+' ==============================
+actor       "Người dùng"          as User
+
+box "Client – ReactJS" #E0F2FE
+    participant "TourListPage"    as TLP
+    participant "TourList"        as TL
+    participant "TourDetailPage"  as TDP
+    participant "AssignmentForm"  as AF
+    participant "AssignmentList"  as AL
+    participant "tourApi"         as TourAPI
+    participant "guideApi"        as GuideAPI
+    participant "assignmentApi"   as AssignAPI
+end box
+
+box "Server – Spring Boot" #E8F5E9
+    participant "TourController"           as TC
+    participant "TourGuideController"      as TGC
+    participant "TourAssignmentController" as TAC
+    participant "TourServiceImpl"          as TS
+    participant "TourGuideServiceImpl"     as TGS
+    participant "TourAssignmentServiceImpl" as TAS
+    participant "TourRepository"           as TR
+    participant "TourGuideRepository"      as TGR
+    participant "TourAssignmentRepository" as TAR
+    participant "GlobalExceptionHandler"   as GEH
+end box
+
+database    "MySQL DB"            as DB
+
+' ==============================
+' GIAI ĐOẠN 1 – Hiển thị danh sách tour
+' ==============================
+== Giai đoạn 1: Hiển thị danh sách tour ==
+
+User -> TLP : Truy cập trang chủ "/"
+activate TLP
+
+TLP -> TL : render()
+activate TL
+
+TL -> TL : useEffect() → fetchTours()
+TL -> TourAPI : getAll(activeOnly=false)
+activate TourAPI
+
+TourAPI -> TC : HTTP GET /api/tours?activeOnly=false
+activate TC
+
+TC -> TS : getAllTours()
+activate TS
+
+TS -> TR : findAll()
+activate TR
+TR -> DB : SELECT * FROM tours
+activate DB
+DB --> TR : List<Tour>
+deactivate DB
+TR --> TS : List<Tour>
+deactivate TR
+
+loop Với mỗi Tour
+    TS -> TAR : countActiveAssignmentsByTourId(tour.id)
+    activate TAR
+    TAR -> DB : SELECT COUNT(*) FROM tour_assignments\nWHERE tour_id=? AND status!='CANCELLED'
+    activate DB
+    DB --> TAR : count
+    deactivate DB
+    TAR --> TS : long count
+    deactivate TAR
+    TS -> TS : toSummaryDTO(tour, count)
+end
+
+TS --> TC : List<TourSummaryDTO>
+deactivate TS
+
+TC --> TourAPI : ApiResponse<List<TourSummaryDTO>> HTTP 200
+deactivate TC
+
+TourAPI --> TL : res.data (List<TourSummaryDTO>)
+deactivate TourAPI
+
+TL --> User : Hiển thị lưới TourCard
+deactivate TL
+deactivate TLP
+
+' ==============================
+' GIAI ĐOẠN 2A – Xem chi tiết tour
+' ==============================
+== Giai đoạn 2A: Xem chi tiết tour ==
+
+User -> TDP : Click TourCard → navigate /tours/:id
+activate TDP
+
+TDP -> TDP : useEffect() → fetchTour()
+TDP -> TourAPI : getById(id)
+activate TourAPI
+
+TourAPI -> TC : HTTP GET /api/tours/{id}
+activate TC
+
+TC -> TS : getTourById(id)
+activate TS
+
+TS -> TR : findByIdWithAssignments(id)
+activate TR
+TR -> DB : SELECT t, a, g FROM tours t\nLEFT JOIN tour_assignments a ON a.tour_id=t.id\nLEFT JOIN tour_guides g ON g.id=a.guide_id\nWHERE t.id=:id
+activate DB
+DB --> TR : Tour + TourAssignment[] + TourGuide[]
+deactivate DB
+TR --> TS : Optional<Tour>
+deactivate TR
+
+TS -> TS : toDetailDTO(tour)\n→ toAssignmentDTO(each assignment)
+TS --> TC : TourDetailDTO
+deactivate TS
+
+TC --> TourAPI : ApiResponse<TourDetailDTO> HTTP 200
+deactivate TC
+
+TourAPI --> TDP : res.data (TourDetailDTO)
+deactivate TourAPI
+
+TDP -> AL : render AssignmentList\n(assignments từ TourDetailDTO)
+TDP --> User : Hiển thị chi tiết tour + danh sách HDV đã phân công
+deactivate TDP
+
+' ==============================
+' GIAI ĐOẠN 2B – Mở form & tải danh sách HDV
+' ==============================
+== Giai đoạn 2B: Mở form phân công + Tải danh sách HDV ==
+
+User -> TDP : Click nút "+ Phân công"
+activate TDP
+
+TDP -> TDP : setShowAssignForm(true)
+TDP -> AF : render AssignmentForm(tour, existingAssignments)
+activate AF
+
+AF -> AF : khởi tạo filters = { status:'AVAILABLE', ... }\nuseEffect() → fetchGuides()
+
+AF -> GuideAPI : getAll({ status: 'AVAILABLE' })
+activate GuideAPI
+
+GuideAPI -> TGC : HTTP GET /api/guides?status=AVAILABLE
+activate TGC
+
+TGC -> TGC : parse status → GuideStatus.AVAILABLE
+TGC -> TGS : filterGuides(AVAILABLE, null, null, null)
+activate TGS
+
+TGS -> TGR : findByFilters(AVAILABLE, "", "", "")
+activate TGR
+TGR -> DB : SELECT g FROM tour_guides g\nWHERE g.status = 'AVAILABLE'\nAND ...\nORDER BY g.full_name ASC
+activate DB
+DB --> TGR : List<TourGuide>
+deactivate DB
+TGR --> TGS : List<TourGuide>
+deactivate TGR
+
+TGS -> TGS : toDTO(each TourGuide)
+TGS --> TGC : List<TourGuideDTO>
+deactivate TGS
+
+TGC --> GuideAPI : ApiResponse<List<TourGuideDTO>> HTTP 200
+deactivate TGC
+
+GuideAPI --> AF : res.data (List<TourGuideDTO>)
+deactivate GuideAPI
+
+AF --> User : Hiển thị danh sách GuideCard (HDV sẵn sàng)
+
+opt Người dùng thay đổi bộ lọc
+    User -> AF : Thay đổi GuideFilter\n(specialization / language / region)
+    AF -> AF : setFilters() → useEffect kích hoạt\n→ fetchGuides() lại [bước 33–42]
+    AF --> User : Cập nhật danh sách HDV theo bộ lọc mới
+end
+
+deactivate TDP
+
+' ==============================
+' GIAI ĐOẠN 3A – Chọn HDV và Submit
+' ==============================
+== Giai đoạn 3A: Người dùng chọn HDV và bấm Lưu phân công ==
+
+User -> AF : Click GuideCard để chọn HDV
+activate AF
+AF -> AF : handleSelectGuide(guide)\n→ thêm { guideId, role:'LEAD', note:'' }\nvào selectedGuides[]
+AF --> User : Highlight GuideCard đã chọn\nHiển thị mục "Đã chọn N HDV"
+
+opt Chỉnh vai trò / ghi chú
+    User -> AF : Chọn vai trò LEAD / ASSISTANT\nNhập ghi chú
+    AF -> AF : handleRoleChange(guideId, role)\nhandleNoteChange(guideId, note)
+end
+
+User -> AF : Click "💾 Lưu phân công"
+AF -> AF : handleSubmit()
+
+alt selectedGuides.length = 0
+    AF --> User : ⚠️ "Vui lòng chọn ít nhất một HDV"\n[Dừng – không gọi API]
+else selectedGuides.length > 0
+    AF -> AF : Đóng gói AssignmentRequestDTO:\n{ tourId, guides:[{guideId,role,note},...] }
+
+    AF -> AssignAPI : save(request)
+    activate AssignAPI
+    AssignAPI -> TAC : HTTP POST /api/assignments\n(Body: AssignmentRequestDTO JSON)
+    activate TAC
+
+    ' ==============================
+    ' GIAI ĐOẠN 3B – Server: Validate và lưu
+    ' ==============================
+    == Giai đoạn 3B: Server validate và lưu phân công ==
+
+    TAC -> TAC : @Valid validate AssignmentRequestDTO
+    TAC -> TAS : saveAssignments(request)
+    activate TAS
+
+    ' --- Validate Tour ---
+    TAS -> TR : findById(request.tourId)
+    activate TR
+    TR -> DB : SELECT * FROM tours WHERE id=?
+    activate DB
+    DB --> TR : Tour entity
+    deactivate DB
+    TR --> TAS : Optional<Tour>
+    deactivate TR
+
+    TAS -> TAS : Kiểm tra tour.status\nnếu COMPLETED hoặc CANCELLED\n→ ném BusinessException
+
+    ' --- Vòng lặp mỗi Guide ---
+    loop Với mỗi GuideAssignmentItem trong request.guides
+
+        TAS -> TGR : findById(item.guideId)
+        activate TGR
+        TGR -> DB : SELECT * FROM tour_guides WHERE id=?
+        activate DB
+        DB --> TGR : TourGuide entity
+        deactivate DB
+        TGR --> TAS : Optional<TourGuide>
+        deactivate TGR
+
+        TAS -> TAS : Kiểm tra guide.status\nnếu INACTIVE → BusinessException\nnếu ON_LEAVE → BusinessException
+
+        TAS -> TGR : countScheduleOverlaps\n(guideId, startDate, endDate, tourId)
+        activate TGR
+        TGR -> DB : SELECT COUNT(a) FROM tour_assignments a\nWHERE a.guide_id=? AND a.status!='CANCELLED'\nAND a.tour_id!=? AND ...\nAND a.tour.startDate<=? AND a.tour.endDate>=?
+        activate DB
+        DB --> TGR : overlapCount
+        deactivate DB
+        TGR --> TAS : long overlapCount
+        deactivate TGR
+
+        TAS -> TAS : nếu overlapCount > 0\n→ ném BusinessException "trùng lịch"
+
+        TAS -> TAR : existsByTourIdAndGuideIdAndStatusNot\n(tourId, guideId, CANCELLED)
+        activate TAR
+        TAR -> DB : SELECT COUNT(*)>0 FROM tour_assignments\nWHERE tour_id=? AND guide_id=?\nAND status!='CANCELLED'
+        activate DB
+        DB --> TAR : boolean
+        deactivate DB
+        TAR --> TAS : boolean alreadyAssigned
+        deactivate TAR
+
+        TAS -> TAS : nếu alreadyAssigned = true\n→ ném BusinessException "đã phân công"
+
+        TAS -> TAS : Tạo TourAssignment:\n{ tour, guide, role, note,\n  status=ASSIGNED, assignedBy='admin' }
+
+        TAS -> TAR : save(assignment)
+        activate TAR
+        TAR -> DB : INSERT INTO tour_assignments\n(tour_id, guide_id, role, note,\nstatus, assigned_at, assigned_by)
+        activate DB
+        DB --> TAR : TourAssignment (với id + assignedAt)
+        deactivate DB
+        TAR --> TAS : TourAssignment đã lưu
+        deactivate TAR
+
+    end
+
+    ' --- Cập nhật trạng thái tour ---
+    == Giai đoạn 3C: Cập nhật trạng thái tour ==
+
+    TAS -> TAS : updateTourStatusIfNeeded(tour)
+    TAS -> TAR : countActiveAssignmentsByTourId(tour.id)
+    activate TAR
+    TAR -> DB : SELECT COUNT(*) FROM tour_assignments\nWHERE tour_id=? AND status!='CANCELLED'
+    activate DB
+    DB --> TAR : long currentCount
+    deactivate DB
+    TAR --> TAS : long currentCount
+    deactivate TAR
+
+    alt currentCount >= minGuides AND status == PLANNING
+        TAS -> TAS : tour.setStatus(OPEN)
+        TAS -> TR : save(tour)
+        activate TR
+        TR -> DB : UPDATE tours SET status='OPEN' WHERE id=?
+        activate DB
+        DB --> TR : ok
+        deactivate DB
+        TR --> TAS : Tour đã cập nhật
+        deactivate TR
+        note right of TAS : Tour chuyển sang OPEN\nvì đã đủ số lượng HDV
+    end
+
+    TAS -> TAS : toDTO(each TourAssignment)\n→ List<AssignmentDTO>
+    TAS --> TAC : List<AssignmentDTO>
+    deactivate TAS
+
+    TAC --> AssignAPI : ApiResponse.ok(\n  "Phân công thành công! Đã phân công N HDV.",\n  List<AssignmentDTO>\n) HTTP 200
+    deactivate TAC
+
+    ' ==============================
+    ' GIAI ĐOẠN 3D – Client nhận kết quả
+    ' ==============================
+    == Giai đoạn 3D: Client nhận kết quả và hiển thị ==
+
+    AssignAPI --> AF : res (ApiResponse)
+    deactivate AssignAPI
+
+    AF -> AF : setSuccessMsg(res.message)\nsetSelectedGuides([])\nonSuccess()
+
+    AF --> User : ✅ "Phân công hướng dẫn viên thành công!\nĐã phân công N hướng dẫn viên."
+
+    AF -> TDP : gọi onSuccess() callback
+    activate TDP
+    TDP -> TDP : fetchTour() [reload chi tiết tour]
+    note right of TDP : Reload để cập nhật\ndanh sách HDV mới
+    TDP -> AL : render AssignmentList\n(assignments cập nhật)
+    TDP --> User : Danh sách HDV đã phân công được cập nhật
+    deactivate TDP
+end
+
+deactivate AF
+
+' ==============================
+' LUỒNG LỖI
+' ==============================
+== Luồng thay thế: Xử lý lỗi ==
+
+note over GEH, DB
+  **Khi bất kỳ BusinessException / ResourceNotFoundException được ném:**
+  → GlobalExceptionHandler bắt
+  → Trả về ApiResponse.error(message) với HTTP 400 / 404 / 500
+  → axiosConfig interceptor đọc response.data.message
+  → AssignmentForm hiển thị ErrorAlert cho người dùng
+end note
+
+@enduml

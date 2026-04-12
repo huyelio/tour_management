@@ -1,0 +1,532 @@
+@startuml TourManagement_ClassDiagram
+
+' ============================
+' THEME & LAYOUT
+' ============================
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam class {
+    BackgroundColor #DBEAFE
+    BorderColor     #1D4ED8
+    HeaderBackgroundColor #1D4ED8
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+    FontColor       #1E293B
+    BorderThickness 1.5
+    RoundCorner     8
+}
+
+skinparam interface {
+    BackgroundColor #EDE9FE
+    BorderColor     #7C3AED
+    HeaderBackgroundColor #7C3AED
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+}
+
+skinparam enum {
+    BackgroundColor #FEF3C7
+    BorderColor     #D97706
+    HeaderBackgroundColor #D97706
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+}
+
+skinparam note {
+    BackgroundColor #F0FDF4
+    BorderColor     #16A34A
+}
+
+skinparam package {
+    BackgroundColor #F1F5F9
+    BorderColor     #64748B
+    FontStyle       bold
+    FontColor       #1E293B
+}
+
+skinparam arrow {
+    Color           #374151
+    Thickness       1.5
+}
+
+' ============================
+' CLIENT – ReactJS
+' ============================
+package "Client – ReactJS" #E0F2FE {
+
+    package "pages" {
+        class TourListPage {
+            +render() : JSX
+        }
+        class TourDetailPage {
+            -id : String
+            -tour : Object
+            -showAssignForm : boolean
+            +fetchTour() : void
+            +render() : JSX
+        }
+    }
+
+    package "components/tour" {
+        class TourCard {
+            -tour : TourSummaryDTO
+            +render() : JSX
+        }
+        class TourList {
+            -tours : TourSummaryDTO[]
+            -loading : boolean
+            -search  : String
+            -activeOnly : boolean
+            +fetchTours() : void
+            +render() : JSX
+        }
+    }
+
+    package "components/guide" {
+        class GuideCard {
+            -guide     : TourGuideDTO
+            -selectable: boolean
+            -selected  : boolean
+            +render() : JSX
+        }
+        class GuideFilter {
+            -filters : Object
+            +onChange() : void
+            +render() : JSX
+        }
+    }
+
+    package "components/assignment" {
+        class AssignmentForm {
+            -tour              : TourDetailDTO
+            -existingAssignments : AssignmentDTO[]
+            -selectedGuides    : Object[]
+            -filters           : Object
+            -saving            : boolean
+            +handleSelectGuide(guide) : void
+            +handleSubmit()    : void
+            +render() : JSX
+        }
+        class AssignmentList {
+            -assignments : AssignmentDTO[]
+            +handleCancel(id) : void
+            +render() : JSX
+        }
+    }
+
+    package "api (axios)" {
+        class tourApi {
+            +getAll(activeOnly) : Promise
+            +getById(id) : Promise
+        }
+        class guideApi {
+            +getAll(filters) : Promise
+            +getById(id) : Promise
+        }
+        class assignmentApi {
+            +getByTour(tourId) : Promise
+            +save(request) : Promise
+            +cancel(assignmentId) : Promise
+        }
+    }
+}
+
+' ============================
+' SERVER – Spring Boot
+' ============================
+package "Server – Spring Boot" #E8F5E9 {
+
+    ' ----- Controller Layer -----
+    package "Controller Layer" {
+        class TourController {
+            -tourService : TourService
+            +getAllTours(activeOnly : boolean) : ResponseEntity
+            +getTourById(id : Long) : ResponseEntity
+        }
+        class TourGuideController {
+            -guideService : TourGuideService
+            +getGuides(status, specialization, language, region) : ResponseEntity
+            +getGuideById(id : Long) : ResponseEntity
+        }
+        class TourAssignmentController {
+            -assignmentService : TourAssignmentService
+            +getAssignmentsByTour(tourId : Long) : ResponseEntity
+            +saveAssignments(request : AssignmentRequestDTO) : ResponseEntity
+            +cancelAssignment(id : Long) : ResponseEntity
+        }
+    }
+
+    ' ----- Service Layer (Interfaces) -----
+    package "Service Layer (Interface)" {
+        interface TourService <<interface>> {
+            +getAllTours() : List<TourSummaryDTO>
+            +getActiveTours() : List<TourSummaryDTO>
+            +getTourById(id : Long) : TourDetailDTO
+        }
+        interface TourGuideService <<interface>> {
+            +getAllGuides() : List<TourGuideDTO>
+            +getGuideById(id : Long) : TourGuideDTO
+            +filterGuides(status, spec, lang, region) : List<TourGuideDTO>
+        }
+        interface TourAssignmentService <<interface>> {
+            +getAssignmentsByTourId(tourId : Long) : List<AssignmentDTO>
+            +saveAssignments(request : AssignmentRequestDTO) : List<AssignmentDTO>
+            +cancelAssignment(assignmentId : Long) : void
+        }
+    }
+
+    ' ----- Service Layer (Implementations) -----
+    package "Service Layer (Impl)" {
+        class TourServiceImpl {
+            -tourRepository : TourRepository
+            -assignmentRepository : TourAssignmentRepository
+            +getAllTours() : List<TourSummaryDTO>
+            +getActiveTours() : List<TourSummaryDTO>
+            +getTourById(id : Long) : TourDetailDTO
+            -toSummaryDTO(tour : Tour) : TourSummaryDTO
+            -toDetailDTO(tour : Tour) : TourDetailDTO
+            -toAssignmentDTO(a : TourAssignment) : AssignmentDTO
+        }
+        class TourGuideServiceImpl {
+            -guideRepository : TourGuideRepository
+            +getAllGuides() : List<TourGuideDTO>
+            +getGuideById(id : Long) : TourGuideDTO
+            +filterGuides(status, spec, lang, region) : List<TourGuideDTO>
+            -toDTO(guide : TourGuide) : TourGuideDTO
+        }
+        class TourAssignmentServiceImpl {
+            -assignmentRepository : TourAssignmentRepository
+            -tourRepository : TourRepository
+            -guideRepository : TourGuideRepository
+            +getAssignmentsByTourId(tourId : Long) : List<AssignmentDTO>
+            +saveAssignments(request : AssignmentRequestDTO) : List<AssignmentDTO>
+            +cancelAssignment(assignmentId : Long) : void
+            -updateTourStatusIfNeeded(tour : Tour) : void
+            -toDTO(a : TourAssignment) : AssignmentDTO
+        }
+    }
+
+    ' ----- Repository (DAO) Layer -----
+    package "Repository (DAO) Layer" {
+        interface TourRepository <<interface>> {
+            +findByCode(code : String) : Optional<Tour>
+            +findByStatus(status : TourStatus) : List<Tour>
+            +findByIdWithAssignments(id : Long) : Optional<Tour>
+            +findActiveTours() : List<Tour>
+        }
+        interface TourGuideRepository <<interface>> {
+            +findByCode(code : String) : Optional<TourGuide>
+            +findByStatus(status : GuideStatus) : List<TourGuide>
+            +findByFilters(status, spec, lang, region) : List<TourGuide>
+            +countScheduleOverlaps(guideId, startDate, endDate, excludeTourId) : long
+        }
+        interface TourAssignmentRepository <<interface>> {
+            +findByTourId(tourId : Long) : List<TourAssignment>
+            +findByTourIdWithDetails(tourId : Long) : List<TourAssignment>
+            +existsByTourIdAndGuideIdAndStatusNot(tourId, guideId, status) : boolean
+            +countActiveAssignmentsByTourId(tourId : Long) : long
+        }
+
+        class JpaRepository <<interface>> {
+        }
+    }
+
+    ' ----- Model (Entity) Layer -----
+    package "Model (Entity) Layer" {
+        class Tour {
+            -id : Long
+            -code : String
+            -name : String
+            -description : String
+            -destination : String
+            -startDate : LocalDate
+            -endDate : LocalDate
+            -durationDays : Integer
+            -maxGuests : Integer
+            -currentGuests : Integer
+            -price : BigDecimal
+            -status : TourStatus
+            -requiredLanguages : String
+            -requiredSpecialization : String
+            -minGuides : Integer
+            -departureRegion : String
+            -assignments : List<TourAssignment>
+        }
+        class TourGuide {
+            -id : Long
+            -code : String
+            -fullName : String
+            -email : String
+            -phone : String
+            -dateOfBirth : LocalDate
+            -specialization : String
+            -languages : String
+            -region : String
+            -experienceYears : Integer
+            -status : GuideStatus
+            -avatarUrl : String
+            -bio : String
+            -assignments : List<TourAssignment>
+        }
+        class TourAssignment {
+            -id : Long
+            -tour : Tour
+            -guide : TourGuide
+            -role : String
+            -note : String
+            -status : AssignmentStatus
+            -assignedAt : LocalDateTime
+            -assignedBy : String
+        }
+    }
+
+    ' ----- Enums -----
+    package "Enums" {
+        enum TourStatus {
+            PLANNING
+            OPEN
+            FULL
+            ONGOING
+            COMPLETED
+            CANCELLED
+        }
+        enum GuideStatus {
+            AVAILABLE
+            ON_TOUR
+            ON_LEAVE
+            INACTIVE
+        }
+        enum AssignmentStatus {
+            ASSIGNED
+            CONFIRMED
+            CANCELLED
+        }
+    }
+
+    ' ----- DTO Layer -----
+    package "DTO Layer" {
+        package "Request" {
+            class AssignmentRequestDTO {
+                -tourId : Long
+                -guides : List<GuideAssignmentItem>
+            }
+            class GuideAssignmentItem {
+                -guideId : Long
+                -role : String
+                -note : String
+            }
+        }
+        package "Response" {
+            class TourSummaryDTO {
+                -id : Long
+                -code : String
+                -name : String
+                -destination : String
+                -startDate : LocalDate
+                -endDate : LocalDate
+                -durationDays : Integer
+                -maxGuests : Integer
+                -currentGuests : Integer
+                -price : BigDecimal
+                -status : TourStatus
+                -minGuides : Integer
+                -assignedGuideCount : long
+            }
+            class TourDetailDTO {
+                -id : Long
+                -code : String
+                -name : String
+                -description : String
+                -destination : String
+                -startDate : LocalDate
+                -endDate : LocalDate
+                -durationDays : Integer
+                -maxGuests : Integer
+                -currentGuests : Integer
+                -price : BigDecimal
+                -status : TourStatus
+                -requiredLanguages : String
+                -requiredSpecialization : String
+                -minGuides : Integer
+                -departureRegion : String
+                -assignments : List<AssignmentDTO>
+            }
+            class TourGuideDTO {
+                -id : Long
+                -code : String
+                -fullName : String
+                -email : String
+                -phone : String
+                -specialization : String
+                -languages : String
+                -region : String
+                -experienceYears : Integer
+                -status : GuideStatus
+                -avatarUrl : String
+                -bio : String
+            }
+            class AssignmentDTO {
+                -id : Long
+                -tourId : Long
+                -tourCode : String
+                -tourName : String
+                -guideId : Long
+                -guideCode : String
+                -guideName : String
+                -guidePhone : String
+                -guideLanguages : String
+                -role : String
+                -note : String
+                -status : AssignmentStatus
+                -assignedAt : LocalDateTime
+                -assignedBy : String
+            }
+            class "ApiResponse<T>" as ApiResponse {
+                -success : boolean
+                -message : String
+                -data : T
+                -timestamp : LocalDateTime
+                +{static} ok(message, data) : ApiResponse<T>
+                +{static} error(message) : ApiResponse<T>
+            }
+        }
+    }
+
+    ' ----- Exception Layer -----
+    package "Exception Layer" {
+        class BusinessException {
+            -status : HttpStatus
+            +getStatus() : HttpStatus
+        }
+        class ResourceNotFoundException {
+            +ResourceNotFoundException(resourceName, id)
+        }
+        class GlobalExceptionHandler {
+            +handleBusinessException(ex) : ResponseEntity
+            +handleNotFound(ex) : ResponseEntity
+            +handleValidation(ex) : ResponseEntity
+            +handleGeneral(ex) : ResponseEntity
+        }
+    }
+
+    ' ----- Config -----
+    package "Config" {
+        class CorsConfig {
+            +addCorsMappings(registry) : void
+        }
+    }
+}
+
+' ============================
+' RELATIONSHIPS – MODEL (Entity)
+' ============================
+Tour          "1" *-- "0..*" TourAssignment : has >
+TourGuide     "1" *-- "0..*" TourAssignment : assigned to >
+Tour           ..>  TourStatus        : uses
+TourGuide      ..>  GuideStatus       : uses
+TourAssignment ..>  AssignmentStatus  : uses
+
+AssignmentRequestDTO *-- GuideAssignmentItem : contains
+
+' ============================
+' RELATIONSHIPS – CONTROLLER → SERVICE
+' ============================
+TourController           ..>  TourService           : uses
+TourGuideController      ..>  TourGuideService      : uses
+TourAssignmentController ..>  TourAssignmentService : uses
+
+' ============================
+' RELATIONSHIPS – SERVICE IMPL → INTERFACE
+' ============================
+TourServiceImpl            ..|>  TourService
+TourGuideServiceImpl       ..|>  TourGuideService
+TourAssignmentServiceImpl  ..|>  TourAssignmentService
+
+' ============================
+' RELATIONSHIPS – SERVICE IMPL → REPOSITORY
+' ============================
+TourServiceImpl            ..>  TourRepository
+TourServiceImpl            ..>  TourAssignmentRepository
+TourGuideServiceImpl       ..>  TourGuideRepository
+TourAssignmentServiceImpl  ..>  TourAssignmentRepository
+TourAssignmentServiceImpl  ..>  TourRepository
+TourAssignmentServiceImpl  ..>  TourGuideRepository
+
+' ============================
+' RELATIONSHIPS – REPOSITORY → JPA
+' ============================
+TourRepository            --|>  JpaRepository
+TourGuideRepository       --|>  JpaRepository
+TourAssignmentRepository  --|>  JpaRepository
+
+' ============================
+' RELATIONSHIPS – DTO
+' ============================
+TourController           ..>  TourSummaryDTO   : returns
+TourController           ..>  TourDetailDTO    : returns
+TourDetailDTO            *--  AssignmentDTO    : contains
+TourGuideController      ..>  TourGuideDTO     : returns
+TourAssignmentController ..>  AssignmentRequestDTO : receives
+TourAssignmentController ..>  AssignmentDTO    : returns
+TourController           ..>  ApiResponse      : wraps
+TourGuideController      ..>  ApiResponse      : wraps
+TourAssignmentController ..>  ApiResponse      : wraps
+
+' ============================
+' RELATIONSHIPS – EXCEPTION
+' ============================
+ResourceNotFoundException  --|>  BusinessException
+GlobalExceptionHandler     ..>  BusinessException         : handles
+GlobalExceptionHandler     ..>  ResourceNotFoundException  : handles
+GlobalExceptionHandler     ..>  ApiResponse               : returns
+
+' ============================
+' RELATIONSHIPS – CLIENT → SERVER (HTTP)
+' ============================
+tourApi       ..>  TourController           : HTTP GET /api/tours
+guideApi      ..>  TourGuideController      : HTTP GET /api/guides
+assignmentApi ..>  TourAssignmentController : HTTP POST/DELETE /api/assignments
+
+TourListPage   ..>  TourList       : uses
+TourDetailPage ..>  AssignmentForm : uses
+TourDetailPage ..>  AssignmentList : uses
+TourDetailPage ..>  tourApi        : calls
+TourList       ..>  TourCard       : renders
+TourList       ..>  tourApi        : calls
+AssignmentForm ..>  GuideCard      : renders
+AssignmentForm ..>  GuideFilter    : renders
+AssignmentForm ..>  guideApi       : calls
+AssignmentForm ..>  assignmentApi  : calls
+AssignmentList ..>  assignmentApi  : calls
+
+' ============================
+' NOTES
+' ============================
+note top of TourAssignment
+  **Bảng trung gian**
+  UNIQUE(tour_id, guide_id)
+  Ràng buộc: không phân công
+  trùng tour_id + guide_id
+end note
+
+note right of TourAssignmentServiceImpl
+  **Luồng saveAssignments():**
+  1. Tìm Tour → validate status
+  2. Với mỗi guide:
+     a. Tìm TourGuide → 404 nếu không có
+     b. Status != INACTIVE/ON_LEAVE
+     c. countScheduleOverlaps = 0
+     d. Chưa được phân công trước
+  3. Lưu TourAssignment
+  4. Cập nhật Tour.status nếu đủ HDV
+end note
+
+note bottom of CorsConfig
+  allowedOriginPatterns:
+  http://localhost:*
+  http://127.0.0.1:*
+end note
+
+@enduml

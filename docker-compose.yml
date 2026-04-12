@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────
+  # MySQL Database
+  # ─────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: tour_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-tour_management_db}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3307:3306"       # map sang 3307 để không đụng MySQL local
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - tour_network
+
+  # ─────────────────────────────────────────
+  # Spring Boot Backend
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./tour-management
+      dockerfile: Dockerfile
+    container_name: tour_backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-tour_management_db}
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      SHOW_SQL: "false"
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - tour_network
+
+  # ─────────────────────────────────────────
+  # React Frontend (Nginx)
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./FE/tour-management-fe
+      dockerfile: Dockerfile
+    container_name: tour_frontend
+    restart: unless-stopped
+    # Dùng 8081 thay vì 80: trên Windows cổng 80 thường bị Hyper-V/IIS giữ hoặc cần quyền admin
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      - backend
+    networks:
+      - tour_network
+
+# ─────────────────────────────────────────
+# Volumes & Networks
+# ─────────────────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  tour_network:
+    driver: bridge

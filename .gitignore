@@ -1,0 +1,15 @@
+# Environment secrets - KHÔNG commit lên git
+.env
+
+# Build outputs
+tour-management/target/
+FE/tour-management-fe/dist/
+FE/tour-management-fe/node_modules/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
