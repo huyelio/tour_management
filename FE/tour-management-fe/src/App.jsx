@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import TourListPage from './pages/TourListPage'
 import TourDetailPage from './pages/TourDetailPage'
+import RevenueReportPage from './pages/RevenueReportPage'
 
 const navLinkStyle = ({ isActive }) => ({
   color: isActive ? '#fff' : 'rgba(255,255,255,0.7)',
@@ -28,6 +29,7 @@ const App = () => (
       </div>
       <nav style={{ display: 'flex', gap: '4px' }}>
         <NavLink to="/" end style={navLinkStyle}>🗺️ Danh sách Tour</NavLink>
+        <NavLink to="/reports/revenue" style={navLinkStyle}>📊 Thống kê doanh thu</NavLink>
       </nav>
     </header>
 
@@ -41,6 +43,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<TourListPage />} />
           <Route path="/tours/:id" element={<TourDetailPage />} />
+          <Route path="/reports/revenue" element={<RevenueReportPage />} />
         </Routes>
       </div>
     </main>

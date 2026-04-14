@@ -1,0 +1,247 @@
+@startuml Sequence_ThongKeTourTheDoanhThu
+
+' ==============================
+' THEME
+' ==============================
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 220
+
+skinparam participant {
+    BackgroundColor #DBEAFE
+    BorderColor     #1D4ED8
+    FontColor       #1E293B
+    FontStyle       bold
+}
+skinparam actor {
+    BackgroundColor #FEF3C7
+    BorderColor     #D97706
+    FontColor       #1E293B
+}
+skinparam database {
+    BackgroundColor #D1FAE5
+    BorderColor     #059669
+    FontColor       #1E293B
+}
+skinparam note {
+    BackgroundColor #FFFBEB
+    BorderColor     #F59E0B
+}
+
+' ==============================
+' PARTICIPANTS
+' ==============================
+actor "Người dùng" as User
+
+box "Client – ReactJS" #E0F2FE
+    participant "RevenueReportPage" as RRP
+    participant "SummaryCard\n(×3)"       as SC
+    participant "RevenueBarChart"         as RBC
+    participant "reportApi"               as ReportAPI
+end box
+
+box "Server – Spring Boot" #E8F5E9
+    participant "ReportController"    as RC
+    participant "ReportServiceImpl"   as RS
+    participant "TourRepository"      as TR
+    participant "BookingRepository"   as BR
+    participant "GlobalExceptionHandler" as GEH
+end box
+
+database "MySQL DB" as DB
+
+' ==============================
+' GIAI ĐOẠN 1 – Tải trang lần đầu
+' ==============================
+== Giai đoạn 1: Tải trang và hiển thị báo cáo lần đầu ==
+
+User -> RRP : Truy cập trang\n"Thống kê doanh thu" (/reports/revenue)
+activate RRP
+
+RRP -> RRP : Khởi tạo state:\nfilters = { sortBy:'revenue_desc', ... }\nreport = null, loading = false
+
+RRP -> RRP : useEffect() → fetchReport(filters)
+RRP -> RRP : setLoading(true)
+
+RRP -> ReportAPI : getTourRevenue({ sortBy:'revenue_desc' })
+activate ReportAPI
+
+ReportAPI -> RC : HTTP GET /api/reports/tour-revenue?sortBy=revenue_desc
+activate RC
+
+RC -> RS : getTourRevenueReport(\n  null, null, null, null, "revenue_desc")
+activate RS
+
+RS -> RS : Validate fromDate/toDate\n→ cả 2 đều null, bỏ qua
+
+RS -> TR : findAll()
+activate TR
+TR -> DB : SELECT * FROM tours
+activate DB
+DB --> TR : List<Tour>
+deactivate DB
+TR --> RS : List<Tour>
+deactivate TR
+
+RS -> RS : stream().filter(...)\n→ không có điều kiện lọc\n→ giữ nguyên toàn bộ
+
+RS -> BR : aggregateRevenueByTour(\n  [CONFIRMED, COMPLETED])
+activate BR
+BR -> DB : SELECT b.tour.id AS tourId,\n  SUM(b.numberOfGuests) AS totalGuests,\n  SUM(b.totalAmount)    AS totalRevenue\nFROM bookings b\nWHERE b.status IN ('CONFIRMED','COMPLETED')\nGROUP BY b.tour.id
+activate DB
+DB --> BR : List<TourRevenueProjection>
+deactivate DB
+BR --> RS : List<TourRevenueProjection>
+deactivate BR
+
+RS -> RS : Chuyển thành Map<tourId, Projection>\nđể tra cứu O(1)
+
+loop Với mỗi Tour trong danh sách đã lọc
+    RS -> RS : Tra cứu projection trong revenueMap\nĐóng gói TourRevenueDTO {\n  tourId, tourCode, tourName,\n  destination, startDate,\n  totalGuests (0 nếu không có),\n  totalRevenue (0 nếu không có)\n}
+end
+
+RS -> RS : sortTourRevenues(list, "revenue_desc")\n→ sắp xếp giảm dần theo totalRevenue
+
+RS -> RS : Tính tổng:\ntotalRevenue = sum(dto.totalRevenue)\ntotalGuests  = sum(dto.totalGuests)\ntotalTours   = list.size()
+
+RS -> RS : Tạo RevenueSummaryDTO\n{ totalTours, totalRevenue, totalGuests }\nTạo RevenueReportDTO\n{ summary, tours }
+
+RS --> RC : RevenueReportDTO
+deactivate RS
+
+RC --> ReportAPI : ApiResponse.ok(\n  "Lấy báo cáo doanh thu thành công",\n  RevenueReportDTO\n) HTTP 200
+deactivate RC
+
+ReportAPI --> RRP : res.data (ApiResponse)
+deactivate ReportAPI
+
+RRP -> RRP : setReport(res.data)\nsetLoading(false)
+
+RRP -> SC : render 3 SummaryCard:\n💰 Tổng doanh thu\n👥 Tổng số khách\n🗺️ Tổng số tour
+activate SC
+SC --> User : Hiển thị 3 thẻ tổng hợp
+deactivate SC
+
+RRP -> RBC : render RevenueBarChart(report.tours)
+activate RBC
+RBC -> RBC : Lấy top 5 tour\ntheo totalRevenue cao nhất\nVẽ biểu đồ cột SVG thuần
+RBC --> User : Hiển thị biểu đồ top 5 tour
+deactivate RBC
+
+RRP --> User : Hiển thị bảng chi tiết doanh thu\n(tất cả tour, hàng cuối: Tổng cộng)
+deactivate RRP
+
+' ==============================
+' GIAI ĐOẠN 2 – Lọc và tìm kiếm
+' ==============================
+== Giai đoạn 2: Người dùng nhập bộ lọc và tìm kiếm ==
+
+User -> RRP : Điền bộ lọc:\nfromDate, toDate, status=COMPLETED,\ndestination="Đà Nẵng", sortBy=date_desc
+activate RRP
+
+RRP -> RRP : setFilters(prev => ({ ...prev, field: value }))
+RRP --> User : Form cập nhật realtime
+
+User -> RRP : Click "🔍 Tìm kiếm"
+RRP -> RRP : handleSearch(e)\n→ e.preventDefault()\n→ fetchReport(filters)
+RRP -> RRP : setLoading(true), setError(null)
+
+RRP -> ReportAPI : getTourRevenue({\n  fromDate, toDate,\n  status:'COMPLETED',\n  destination:'Đà Nẵng',\n  sortBy:'date_desc'\n})
+activate ReportAPI
+
+ReportAPI -> RC : HTTP GET /api/reports/tour-revenue\n?fromDate=...&toDate=...&status=COMPLETED\n&destination=Đà+Nẵng&sortBy=date_desc
+activate RC
+
+RC -> RS : getTourRevenueReport(\n  fromDate, toDate, COMPLETED,\n  "Đà Nẵng", "date_desc")
+activate RS
+
+RS -> RS : Validate: fromDate.isAfter(toDate)?\n→ Không → tiếp tục
+
+RS -> TR : findAll()
+activate TR
+TR -> DB : SELECT * FROM tours
+activate DB
+DB --> TR : List<Tour>
+deactivate DB
+TR --> RS : List<Tour>
+deactivate TR
+
+RS -> RS : stream().filter:\n① startDate >= fromDate\n② startDate <= toDate\n③ status == COMPLETED\n④ destination.contains("Đà Nẵng")\n→ List<Tour> đã lọc
+
+RS -> BR : aggregateRevenueByTour([CONFIRMED, COMPLETED])
+activate BR
+BR -> DB : SELECT b.tour.id, SUM(guests), SUM(amount)\nFROM bookings WHERE status IN (...)\nGROUP BY b.tour.id
+activate DB
+DB --> BR : List<TourRevenueProjection>
+deactivate DB
+BR --> RS : List<TourRevenueProjection>
+deactivate BR
+
+RS -> RS : Gộp tour + doanh thu\n→ sortTourRevenues(list, "date_desc")\n(sắp xếp giảm dần theo startDate)\n→ Tính tổng → đóng gói RevenueReportDTO
+
+RS --> RC : RevenueReportDTO (đã lọc)
+deactivate RS
+
+RC --> ReportAPI : ApiResponse HTTP 200
+deactivate RC
+
+ReportAPI --> RRP : res.data
+deactivate ReportAPI
+
+RRP -> RRP : setReport(res.data), setLoading(false)
+RRP --> User : Cập nhật: biểu đồ + bảng\nchỉ hiển thị tour thỏa điều kiện lọc
+deactivate RRP
+
+' ==============================
+' GIAI ĐOẠN 3 – Đặt lại bộ lọc
+' ==============================
+== Giai đoạn 3: Người dùng đặt lại bộ lọc ==
+
+User -> RRP : Click "Đặt lại"
+activate RRP
+
+RRP -> RRP : handleReset()\n→ defaults = { fromDate:'', toDate:'',\n   status:'', destination:'',\n   sortBy:'revenue_desc' }\n→ setFilters(defaults)
+
+RRP -> RRP : fetchReport(defaults)\n[Lặp lại luồng Giai đoạn 1,\nbước fetchReport → hiển thị]
+
+RRP --> User : Form reset + hiển thị\nbáo cáo toàn bộ tour (không lọc)
+deactivate RRP
+
+' ==============================
+' LUỒNG LỖI
+' ==============================
+== Luồng thay thế: Xử lý lỗi ==
+
+note over GEH, DB
+  **Các trường hợp lỗi từ server:**
+
+  ① fromDate sau toDate (bước validate trong RS)
+    → BusinessException("Ngày bắt đầu không được sau ngày kết thúc")
+    → GlobalExceptionHandler → HTTP 400
+
+  ② status truyền vào sai enum (RC nhận param)
+    → Spring MethodArgumentTypeMismatchException
+    → GlobalExceptionHandler → HTTP 400
+
+  ③ Lỗi kết nối DB (TR.findAll hoặc BR.aggregateRevenueByTour)
+    → RuntimeException → GlobalExceptionHandler → HTTP 500
+end note
+
+note over RRP, ReportAPI
+  **Xử lý lỗi phía client (fetchReport catch block):**
+
+  Mọi lỗi HTTP (400 / 404 / 500) hoặc lỗi mạng
+  → axiosConfig interceptor extract error.message
+  → catch(err) → setError(err.message)
+  → setLoading(false)
+  → Hiển thị <ErrorAlert message={error} />
+
+  Trường hợp không có tour nào thỏa điều kiện:
+  → Server vẫn trả HTTP 200 với tours = []
+  → FE hiển thị "📭 Không có dữ liệu phù hợp với điều kiện lọc."
+end note
+
+@enduml

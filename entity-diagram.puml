@@ -1,0 +1,121 @@
+@startuml Entity Diagram - Tour Management System
+skinparam classAttributeIconSize 0
+skinparam class {
+    BackgroundColor #ADE8F4
+    BorderColor #0077B6
+    HeaderBackgroundColor #90E0EF
+    FontColor #03045E
+    ArrowColor #0077B6
+}
+skinparam shadowing false
+skinparam linetype ortho
+
+title Sơ đồ Thực thể - Hệ thống Quản lý Tour Du lịch
+
+class Tour {
+  -id : Long
+  -code : String
+  -name : String
+  -description : String
+  -destination : String
+  -startDate : LocalDate
+  -endDate : LocalDate
+  -durationDays : Integer
+  -maxGuests : Integer
+  -currentGuests : Integer
+  -price : BigDecimal
+  -status : TourStatus
+  -requiredLanguages : String
+  -requiredSpecialization : String
+  -minGuides : Integer
+  -departureRegion : String
+}
+
+class TourGuide {
+  -id : Long
+  -code : String
+  -fullName : String
+  -email : String
+  -phone : String
+  -dateOfBirth : LocalDate
+  -specialization : String
+  -languages : String
+  -region : String
+  -experienceYears : Integer
+  -status : GuideStatus
+  -avatarUrl : String
+  -bio : String
+}
+
+class Customer {
+  -id : Long
+  -code : String
+  -fullName : String
+  -phone : String
+  -email : String
+  -createdAt : LocalDateTime
+}
+
+class Booking {
+  -id : Long
+  -bookingCode : String
+  -bookingDate : LocalDate
+  -numberOfGuests : Integer
+  -unitPrice : BigDecimal
+  -discountAmount : BigDecimal
+  -totalAmount : BigDecimal
+  -status : BookingStatus
+  -createdAt : LocalDateTime
+}
+
+class TourAssignment {
+  -id : Long
+  -role : String
+  -note : String
+  -status : AssignmentStatus
+  -assignedAt : LocalDateTime
+  -assignedBy : String
+}
+
+enum TourStatus {
+  PLANNING
+  OPEN
+  FULL
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum GuideStatus {
+  AVAILABLE
+  ON_TOUR
+  ON_LEAVE
+  INACTIVE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  CONFIRMED
+  CANCELLED
+}
+
+Tour "1" *-down- "*" Booking : có
+Tour "1" *-right- "*" TourAssignment : phân công
+
+Customer "1" o-down- "*" Booking : đặt
+
+TourGuide "1" o-left- "*" TourAssignment : được phân công
+
+Tour .right. TourStatus
+TourGuide .right. GuideStatus
+Booking .down. BookingStatus
+TourAssignment .down. AssignmentStatus
+
+@enduml

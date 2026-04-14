@@ -303,6 +303,12 @@ package "Server – Spring Boot" #E8F5E9 {
             CONFIRMED
             CANCELLED
         }
+        enum BookingStatus {
+            PENDING
+            CONFIRMED
+            CANCELLED
+            COMPLETED
+        }
     }
 
     ' ----- DTO Layer -----
@@ -394,6 +400,81 @@ package "Server – Spring Boot" #E8F5E9 {
         }
     }
 
+    ' ----- Customer & Booking Entities -----
+    package "Booking Domain" {
+        class Customer {
+            -id : Long
+            -code : String
+            -fullName : String
+            -phone : String
+            -email : String
+            -createdAt : LocalDateTime
+        }
+        class Booking {
+            -id : Long
+            -bookingCode : String
+            -tour : Tour
+            -customer : Customer
+            -bookingDate : LocalDate
+            -numberOfGuests : Integer
+            -unitPrice : BigDecimal
+            -discountAmount : BigDecimal
+            -totalAmount : BigDecimal
+            -status : BookingStatus
+            -createdAt : LocalDateTime
+        }
+    }
+
+    ' ----- Report Layer -----
+    package "Report Layer" {
+        interface ReportService <<interface>> {
+            +getTourRevenueReport(fromDate, toDate, status, destination, sortBy) : RevenueReportDTO
+        }
+        class ReportServiceImpl {
+            -tourRepository : TourRepository
+            -bookingRepository : BookingRepository
+            +getTourRevenueReport(...) : RevenueReportDTO
+            -sortTourRevenues(list, sortBy) : void
+        }
+        class ReportController {
+            -reportService : ReportService
+            +getTourRevenue(fromDate, toDate, status, destination, sortBy) : ResponseEntity
+        }
+        interface BookingRepository <<interface>> {
+            +aggregateRevenueByTour(statuses) : List<TourRevenueProjection>
+        }
+        interface CustomerRepository <<interface>> {
+            +findByCode(code) : Optional<Customer>
+        }
+        interface TourRevenueProjection <<interface>> {
+            +getTourId() : Long
+            +getTotalGuests() : Long
+            +getTotalRevenue() : BigDecimal
+        }
+    }
+
+    ' ----- Report DTOs -----
+    package "Report DTO" {
+        class TourRevenueDTO {
+            -tourId : Long
+            -tourCode : String
+            -tourName : String
+            -destination : String
+            -startDate : LocalDate
+            -totalGuests : Long
+            -totalRevenue : BigDecimal
+        }
+        class RevenueSummaryDTO {
+            -totalTours : int
+            -totalGuests : Long
+            -totalRevenue : BigDecimal
+        }
+        class RevenueReportDTO {
+            -summary : RevenueSummaryDTO
+            -tours : List<TourRevenueDTO>
+        }
+    }
+
     ' ----- Exception Layer -----
     package "Exception Layer" {
         class BusinessException {
@@ -427,6 +508,10 @@ TourGuide     "1" *-- "0..*" TourAssignment : assigned to >
 Tour           ..>  TourStatus        : uses
 TourGuide      ..>  GuideStatus       : uses
 TourAssignment ..>  AssignmentStatus  : uses
+
+Tour      "1" *-- "0..*" Booking  : has >
+Customer  "1" *-- "0..*" Booking  : makes >
+Booking    ..>  BookingStatus : uses
 
 AssignmentRequestDTO *-- GuideAssignmentItem : contains
 
@@ -464,6 +549,17 @@ TourAssignmentRepository  --|>  JpaRepository
 ' ============================
 ' RELATIONSHIPS – DTO
 ' ============================
+ReportController         ..>  ReportService    : uses
+ReportServiceImpl        ..|>  ReportService
+ReportServiceImpl        ..>  TourRepository
+ReportServiceImpl        ..>  BookingRepository
+BookingRepository        --|>  JpaRepository
+CustomerRepository       --|>  JpaRepository
+BookingRepository        ..>  TourRevenueProjection : returns
+ReportController         ..>  RevenueReportDTO : returns
+RevenueReportDTO         *--  RevenueSummaryDTO : contains
+RevenueReportDTO         *--  TourRevenueDTO   : contains
+
 TourController           ..>  TourSummaryDTO   : returns
 TourController           ..>  TourDetailDTO    : returns
 TourDetailDTO            *--  AssignmentDTO    : contains

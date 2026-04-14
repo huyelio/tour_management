@@ -1,0 +1,336 @@
+@startuml RevenueReport_ClassDiagram
+' ============================================================
+' Biểu đồ lớp – Use Case: Thống kê doanh thu tour
+' ============================================================
+
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+skinparam class {
+    BackgroundColor #DBEAFE
+    BorderColor     #1D4ED8
+    HeaderBackgroundColor #1D4ED8
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+    FontColor       #1E293B
+    BorderThickness 1.5
+    RoundCorner     8
+}
+
+skinparam interface {
+    BackgroundColor #EDE9FE
+    BorderColor     #7C3AED
+    HeaderBackgroundColor #7C3AED
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+}
+
+skinparam enum {
+    BackgroundColor #FEF3C7
+    BorderColor     #D97706
+    HeaderBackgroundColor #D97706
+    HeaderFontColor #FFFFFF
+    HeaderFontStyle bold
+}
+
+skinparam note {
+    BackgroundColor #F0FDF4
+    BorderColor     #16A34A
+}
+
+skinparam package {
+    BackgroundColor #F1F5F9
+    BorderColor     #64748B
+    FontStyle       bold
+    FontColor       #1E293B
+}
+
+skinparam arrow {
+    Color     #374151
+    Thickness 1.5
+}
+
+' ============================================================
+' TẦNG CLIENT – ReactJS
+' ============================================================
+package "Client – ReactJS  :8081" #E0F2FE {
+
+    package "pages" {
+        class RevenueReportPage {
+            -filters : FilterState
+            -report  : RevenueReportDTO
+            -loading : boolean
+            -error   : string
+            +fetchReport(params) : void
+            +handleSearch(e)     : void
+            +handleReset()       : void
+            +render()            : JSX
+        }
+    }
+
+    package "components (inline)" {
+        class SummaryCard {
+            -icon  : string
+            -label : string
+            -value : string
+            -color : string
+            +render() : JSX
+        }
+        class RevenueBarChart {
+            -data : TourRevenueDTO[]
+            +render() : JSX
+        }
+    }
+
+    package "api" {
+        class reportApi {
+            +getTourRevenue(params) : Promise<ApiResponse>
+        }
+        class axiosConfig {
+            -baseURL : "/api"
+            -timeout : 30000
+            +interceptors.response : ErrorHandler
+        }
+    }
+}
+
+' ============================================================
+' TẦNG SERVER – Spring Boot
+' ============================================================
+package "Server – Spring Boot  :8080" #E8F5E9 {
+
+    ' ─── Controller ───────────────────────────────────────
+    package "Controller Layer" {
+        class ReportController {
+            -reportService : ReportService
+            +getTourRevenue(\n  fromDate : LocalDate,\n  toDate   : LocalDate,\n  status   : TourStatus,\n  destination : String,\n  sortBy   : String\n) : ResponseEntity<ApiResponse<RevenueReportDTO>>
+        }
+    }
+
+    ' ─── Service ──────────────────────────────────────────
+    package "Service Layer" {
+        interface ReportService <<interface>> {
+            +getTourRevenueReport(\n  fromDate    : LocalDate,\n  toDate      : LocalDate,\n  tourStatus  : TourStatus,\n  destination : String,\n  sortBy      : String\n) : RevenueReportDTO
+        }
+
+        class ReportServiceImpl {
+            -tourRepository    : TourRepository
+            -bookingRepository : BookingRepository
+            -{static} REVENUE_STATUSES : List<BookingStatus>
+            +getTourRevenueReport(...) : RevenueReportDTO
+            -sortTourRevenues(\n  list   : List<TourRevenueDTO>,\n  sortBy : String\n) : void
+        }
+    }
+
+    ' ─── Repository ───────────────────────────────────────
+    package "Repository Layer" {
+        interface TourRepository <<interface>> {
+            +findAll() : List<Tour>
+        }
+
+        interface BookingRepository <<interface>> {
+            +aggregateRevenueByTour(\n  statuses : Collection<BookingStatus>\n) : List<TourRevenueProjection>
+        }
+
+        interface TourRevenueProjection <<interface>> {
+            +getTourId()      : Long
+            +getTotalGuests() : Long
+            +getTotalRevenue(): BigDecimal
+        }
+
+        interface JpaRepository <<interface>> {
+        }
+    }
+
+    ' ─── Model (Entity) ───────────────────────────────────
+    package "Model (Entity) Layer" {
+        class Tour {
+            -id          : Long
+            -code        : String
+            -name        : String
+            -destination : String
+            -startDate   : LocalDate
+            -endDate     : LocalDate
+            -status      : TourStatus
+        }
+
+        class Booking {
+            -id             : Long
+            -bookingCode    : String
+            -tour           : Tour
+            -customer       : Customer
+            -bookingDate    : LocalDate
+            -numberOfGuests : Integer
+            -unitPrice      : BigDecimal
+            -discountAmount : BigDecimal
+            -totalAmount    : BigDecimal
+            -status         : BookingStatus
+        }
+
+        class Customer {
+            -id       : Long
+            -code     : String
+            -fullName : String
+            -phone    : String
+            -email    : String
+        }
+    }
+
+    ' ─── DTO Layer ────────────────────────────────────────
+    package "DTO Layer" {
+        class RevenueReportDTO {
+            -summary : RevenueSummaryDTO
+            -tours   : List<TourRevenueDTO>
+        }
+
+        class RevenueSummaryDTO {
+            -totalTours   : int
+            -totalGuests  : Long
+            -totalRevenue : BigDecimal
+        }
+
+        class TourRevenueDTO {
+            -tourId       : Long
+            -tourCode     : String
+            -tourName     : String
+            -destination  : String
+            -startDate    : LocalDate
+            -totalGuests  : Long
+            -totalRevenue : BigDecimal
+        }
+
+        class "ApiResponse<T>" as ApiResponse {
+            -success   : boolean
+            -message   : String
+            -data      : T
+            -timestamp : LocalDateTime
+            +{static} ok(message, data) : ApiResponse<T>
+        }
+    }
+
+    ' ─── Enum ─────────────────────────────────────────────
+    package "Enums" {
+        enum BookingStatus {
+            PENDING
+            CONFIRMED
+            CANCELLED
+            COMPLETED
+        }
+
+        enum TourStatus {
+            PLANNING
+            OPEN
+            FULL
+            ONGOING
+            COMPLETED
+            CANCELLED
+        }
+    }
+
+    ' ─── Exception ────────────────────────────────────────
+    package "Exception Layer" {
+        class BusinessException {
+            -status : HttpStatus
+        }
+        class GlobalExceptionHandler {
+            +handleBusinessException(ex) : ResponseEntity
+            +handleGeneral(ex)           : ResponseEntity
+        }
+    }
+}
+
+' ============================================================
+' RELATIONSHIPS – Model
+' ============================================================
+Tour     "1" *-- "0..*" Booking  : has >
+Customer "1" *-- "0..*" Booking  : makes >
+Booking  ..> BookingStatus : uses
+Tour     ..> TourStatus    : uses
+
+' ============================================================
+' RELATIONSHIPS – Repository → JPA
+' ============================================================
+TourRepository    --|> JpaRepository
+BookingRepository --|> JpaRepository
+BookingRepository ..> TourRevenueProjection : returns >
+
+' ============================================================
+' RELATIONSHIPS – Service
+' ============================================================
+ReportServiceImpl ..|> ReportService
+ReportServiceImpl ..> TourRepository    : uses
+ReportServiceImpl ..> BookingRepository : uses
+ReportServiceImpl ..> TourRevenueProjection : reads
+ReportServiceImpl ..> BookingStatus     : filters by
+ReportServiceImpl ..> TourStatus        : filters by
+ReportServiceImpl ..> BusinessException : throws
+
+' ============================================================
+' RELATIONSHIPS – Controller
+' ============================================================
+ReportController ..> ReportService    : uses
+ReportController ..> TourStatus       : receives param
+ReportController ..> ApiResponse      : wraps result
+ReportController ..> RevenueReportDTO : returns
+GlobalExceptionHandler ..> BusinessException : handles
+GlobalExceptionHandler ..> ApiResponse       : returns
+
+' ============================================================
+' RELATIONSHIPS – DTO
+' ============================================================
+RevenueReportDTO *-- RevenueSummaryDTO : contains
+RevenueReportDTO *-- TourRevenueDTO   : contains (list)
+
+' ============================================================
+' RELATIONSHIPS – Client → Server
+' ============================================================
+reportApi        ..> axiosConfig      : uses
+RevenueReportPage ..> reportApi       : calls
+RevenueReportPage ..> SummaryCard     : renders
+RevenueReportPage ..> RevenueBarChart : renders
+reportApi        ..> ReportController : HTTP GET /api/reports/tour-revenue
+
+' ============================================================
+' NOTES
+' ============================================================
+note right of ReportServiceImpl
+  **Luồng getTourRevenueReport():**
+  1. Validate fromDate <= toDate
+  2. TourRepository.findAll()
+     → lọc: ngày, status, destination
+  3. BookingRepository.aggregateRevenueByTour(
+       [CONFIRMED, COMPLETED])
+     → GROUP BY tour_id
+  4. Merge Tour + Projection → TourRevenueDTO
+  5. Sắp xếp theo sortBy
+  6. Tính summary (tổng cộng)
+end note
+
+note right of Booking
+  **Công thức:**
+  totalAmount =
+    numberOfGuests × unitPrice
+    − discountAmount
+  
+  **Doanh thu:**
+  Chỉ tính status =
+    CONFIRMED | COMPLETED
+  Bỏ qua: PENDING, CANCELLED
+end note
+
+note bottom of TourRevenueProjection
+  JPA Projection Interface
+  Ánh xạ trực tiếp từ kết quả
+  GROUP BY query trong JPQL
+end note
+
+note top of RevenueBarChart
+  Pure SVG (không dùng
+  thư viện ngoài)
+  Hiển thị top 5 tour
+  doanh thu cao nhất
+end note
+
+@enduml
