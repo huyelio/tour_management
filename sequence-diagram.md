@@ -2,281 +2,225 @@
 
 ## Tổng quan Use Case
 
-| Thông tin | Chi tiết |
-|---|---|
-| **Tên Use Case** | Phân công hướng dẫn viên cho tour |
-| **Actor** | Quản lý (người dùng) |
-| **Mục tiêu** | Gán một hoặc nhiều hướng dẫn viên phù hợp cho một tour du lịch |
-| **Điều kiện trước** | Người dùng đã đăng nhập, hệ thống đang hoạt động |
-| **Điều kiện sau** | Phân công được lưu vào DB, trạng thái tour cập nhật nếu đủ HDV |
+| Thông tin           | Chi tiết                                                       |
+| ------------------- | -------------------------------------------------------------- |
+| **Tên Use Case**    | Phân công hướng dẫn viên cho tour                              |
+| **Actor**           | Quản lý (người dùng)                                           |
+| **Mục tiêu**        | Gán một hoặc nhiều hướng dẫn viên phù hợp cho một tour du lịch |
+| **Điều kiện trước** | Người dùng đã đăng nhập, hệ thống đang hoạt động               |
+| **Điều kiện sau**   | Phân công được lưu vào DB, trạng thái tour cập nhật nếu đủ HDV |
 
 ---
 
-## Luồng chính – Chia làm 3 giai đoạn
+## Các bước sơ đồ tuần tự
 
-```
-Giai đoạn 1: Hiển thị danh sách tour
-Giai đoạn 2: Xem chi tiết tour + mở form phân công + tải danh sách HDV
-Giai đoạn 3: Lưu phân công (validate + ghi DB + cập nhật trạng thái)
-```
+### Giai đoạn 1 – Hiển thị danh sách tour
 
----
-
-## GIAI ĐOẠN 1 – Hiển thị danh sách tour
-
-**1.** Người dùng truy cập trang chủ → hệ thống render `TourListPage`.
+**1.** Người dùng truy cập trang chủ "Quản lý Tour", hệ thống hiển thị trang `TourListPage`.
 
 **2.** `TourListPage` khởi tạo và render component `TourList`.
 
-**3.** `TourList` gọi hàm `fetchTours()` trong `useEffect` để tải dữ liệu khi component mount.
+**3.** `TourList` gọi hàm `fetchTours()` trong `useEffect` để tải danh sách tour khi component được mount.
 
-**4.** `fetchTours()` gọi `tourApi.getAll(activeOnly)` – gửi HTTP GET `/api/tours?activeOnly=false` đến server.
+**4.** `fetchTours()` gọi `tourApi.getAll(activeOnly)` để gửi HTTP GET `/api/tours?activeOnly=false` lên server.
 
-**5.** `TourController` nhận request, gọi `tourService.getAllTours()`.
+**5.** `TourController` nhận request và gọi hàm `tourService.getAllTours()`.
 
-**6.** `TourServiceImpl.getAllTours()` gọi `tourRepository.findAll()` để lấy toàn bộ tour từ DB.
+**6.** `TourServiceImpl.getAllTours()` gọi `tourRepository.findAll()` để lấy toàn bộ tour từ database.
 
-**7.** `TourRepository` thực thi câu truy vấn `SELECT * FROM tours` trên bảng `tours`.
+**7.** `TourRepository` thực thi câu truy vấn lấy tất cả bản ghi trong bảng `tours`.
 
 **8.** Database trả về danh sách entity `Tour` cho `TourRepository`.
 
 **9.** `TourRepository` trả về `List<Tour>` cho `TourServiceImpl`.
 
-**10.** `TourServiceImpl` gọi thêm `assignmentRepository.countActiveAssignmentsByTourId(tour.getId())` cho mỗi tour để lấy số lượng HDV đã phân công.
+**10.** Với mỗi tour, `TourServiceImpl` gọi `assignmentRepository.countActiveAssignmentsByTourId(id)` để đếm số HDV đã được phân công.
 
-**11.** `TourAssignmentRepository` truy vấn `SELECT COUNT(*) FROM tour_assignments WHERE tour_id = ? AND status != 'CANCELLED'`.
+**11.** `TourAssignmentRepository` thực thi truy vấn đếm số phân công đang hoạt động (`status != CANCELLED`) theo `tourId`.
 
-**12.** DB trả về số lượng phân công đang hoạt động.
+**12.** Database trả về số lượng phân công đang hoạt động cho mỗi tour.
 
-**13.** `TourServiceImpl` đóng gói mỗi `Tour` thành `TourSummaryDTO` (gọi `toSummaryDTO()`), trả về `List<TourSummaryDTO>`.
+**13.** `TourServiceImpl` đóng gói từng `Tour` thành `TourSummaryDTO` (gọi `toSummaryDTO()`), trả về `List<TourSummaryDTO>`.
 
-**14.** `TourController` bọc kết quả vào `ApiResponse.ok(...)` và trả về `ResponseEntity<ApiResponse<List<TourSummaryDTO>>>` với HTTP 200.
+**14.** `TourController` bọc kết quả vào `ApiResponse.ok(...)` và trả về HTTP 200 cho client.
 
-**15.** `tourApi` nhận phản hồi, trả về `res.data` (mảng `TourSummaryDTO`) cho `TourList`.
+**15.** `tourApi` nhận phản hồi và trả về mảng `TourSummaryDTO` cho `TourList`.
 
-**16.** `TourList` cập nhật state `tours`, render danh sách `TourCard` – người dùng thấy lưới tour.
+**16.** `TourList` cập nhật state `tours` và render danh sách `TourCard` – người dùng thấy lưới danh sách tour.
 
 ---
 
-## GIAI ĐOẠN 2 – Xem chi tiết tour + Mở form phân công + Tải danh sách HDV
+### Giai đoạn 2A – Xem chi tiết tour
 
-### 2A – Xem chi tiết tour
+**17.** Người dùng click vào một `TourCard`, React Router điều hướng đến `/tours/:id` và render `TourDetailPage`.
 
-**17.** Người dùng click vào một `TourCard` → React Router điều hướng đến `/tours/:id`, render `TourDetailPage`.
+**18.** `TourDetailPage` gọi `fetchTour()` trong `useEffect` để tải thông tin chi tiết tour.
 
-**18.** `TourDetailPage` gọi `fetchTour()` trong `useEffect`.
+**19.** `fetchTour()` gọi `tourApi.getById(id)` để gửi HTTP GET `/api/tours/{id}` lên server.
 
-**19.** `fetchTour()` gọi `tourApi.getById(id)` – gửi HTTP GET `/api/tours/{id}` đến server.
-
-**20.** `TourController` nhận request, gọi `tourService.getTourById(id)`.
+**20.** `TourController` nhận request và gọi hàm `tourService.getTourById(id)`.
 
 **21.** `TourServiceImpl.getTourById(id)` gọi `tourRepository.findByIdWithAssignments(id)`.
 
-**22.** `TourRepository` thực thi JPQL:
-```
-SELECT t FROM Tour t LEFT JOIN FETCH t.assignments a LEFT JOIN FETCH a.guide WHERE t.id = :id
-```
-→ Truy vấn bảng `tours` JOIN `tour_assignments` JOIN `tour_guides` trong một lần.
+**22.** `TourRepository` thực thi JPQL kết hợp `tours LEFT JOIN tour_assignments LEFT JOIN tour_guides` với điều kiện `WHERE t.id = :id` để lấy đầy đủ thông tin tour trong một lần truy vấn.
 
-**23.** DB trả về entity `Tour` kèm toàn bộ `TourAssignment` và `TourGuide` liên quan.
+**23.** Database trả về entity `Tour` kèm toàn bộ `TourAssignment` và `TourGuide` liên quan.
 
 **24.** `TourRepository` trả về `Optional<Tour>` cho `TourServiceImpl`.
 
-**25.** `TourServiceImpl` đóng gói `Tour` → `TourDetailDTO` (gọi `toDetailDTO()`), đóng gói mỗi `TourAssignment` → `AssignmentDTO` (gọi `toAssignmentDTO()`).
+**25.** `TourServiceImpl` đóng gói `Tour` thành `TourDetailDTO` (gọi `toDetailDTO()`) và từng `TourAssignment` thành `AssignmentDTO` (gọi `toAssignmentDTO()`).
 
 **26.** `TourController` bọc kết quả vào `ApiResponse.ok(...)` và trả về HTTP 200.
 
-**27.** `tourApi` nhận phản hồi, trả về `res.data` (`TourDetailDTO`) cho `TourDetailPage`.
+**27.** `tourApi` nhận phản hồi và trả về `TourDetailDTO` cho `TourDetailPage`.
 
-**28.** `TourDetailPage` cập nhật state `tour`, render thông tin chi tiết tour và component `AssignmentList` (danh sách HDV đã phân công).
+**28.** `TourDetailPage` cập nhật state `tour`, hiển thị thông tin chi tiết tour và component `AssignmentList` (danh sách HDV đã phân công).
 
-### 2B – Mở form phân công và tải danh sách HDV
+---
 
-**29.** Người dùng click nút **"+ Phân công"** → `TourDetailPage` cập nhật state `showAssignForm = true`.
+### Giai đoạn 2B – Mở form phân công và tải danh sách HDV
+
+**29.** Người dùng click nút **"+ Phân công"**, `TourDetailPage` cập nhật state `showAssignForm = true`.
 
 **30.** `TourDetailPage` render component `AssignmentForm` (modal), truyền `tour` và `existingAssignments` qua props.
 
-**31.** `AssignmentForm` khởi tạo với filter mặc định `{ status: 'AVAILABLE', specialization: '', language: '', region: '' }`.
+**31.** `AssignmentForm` khởi tạo với bộ lọc mặc định `{ status: 'AVAILABLE', specialization: '', language: '', region: '' }`.
 
-**32.** `useEffect` trong `AssignmentForm` kích hoạt `fetchGuides()` ngay khi mount.
+**32.** `useEffect` trong `AssignmentForm` kích hoạt `fetchGuides()` ngay khi component được mount.
 
-**33.** `fetchGuides()` gọi `guideApi.getAll({ status: 'AVAILABLE' })` – gửi HTTP GET `/api/guides?status=AVAILABLE` đến server.
+**33.** `fetchGuides()` gọi `guideApi.getAll({ status: 'AVAILABLE' })` để gửi HTTP GET `/api/guides?status=AVAILABLE` lên server.
 
-**34.** `TourGuideController` nhận request, parse query param `status = "AVAILABLE"`, chuyển thành enum `GuideStatus.AVAILABLE`, gọi `guideService.filterGuides(GuideStatus.AVAILABLE, null, null, null)`.
+**34.** `TourGuideController` nhận request, chuyển đổi query param `status` thành enum `GuideStatus.AVAILABLE` và gọi `guideService.filterGuides(AVAILABLE, null, null, null)`.
 
 **35.** `TourGuideServiceImpl.filterGuides()` gọi `guideRepository.findByFilters(status, specialization, language, region)`.
 
-**36.** `TourGuideRepository` thực thi JPQL:
-```
-SELECT g FROM TourGuide g WHERE g.status = :status ... ORDER BY g.fullName ASC
-```
-→ Truy vấn bảng `tour_guides` lọc theo trạng thái và các tiêu chí.
+**36.** `TourGuideRepository` thực thi JPQL `SELECT g FROM TourGuide g WHERE g.status = :status ... ORDER BY g.fullName ASC` để truy vấn bảng `tour_guides` lọc theo trạng thái và các tiêu chí.
 
-**37.** DB trả về danh sách entity `TourGuide` thỏa điều kiện.
+**37.** Database trả về danh sách entity `TourGuide` thỏa điều kiện lọc.
 
 **38.** `TourGuideRepository` trả về `List<TourGuide>` cho `TourGuideServiceImpl`.
 
-**39.** `TourGuideServiceImpl` đóng gói mỗi `TourGuide` → `TourGuideDTO` (gọi `toDTO()`), trả về `List<TourGuideDTO>`.
+**39.** `TourGuideServiceImpl` đóng gói từng `TourGuide` thành `TourGuideDTO` (gọi `toDTO()`), trả về `List<TourGuideDTO>`.
 
-**40.** `TourGuideController` bọc vào `ApiResponse.ok(...)` và trả về HTTP 200.
+**40.** `TourGuideController` bọc kết quả vào `ApiResponse.ok(...)` và trả về HTTP 200.
 
-**41.** `guideApi` nhận phản hồi, trả về `res.data` (mảng `TourGuideDTO`) cho `AssignmentForm`.
+**41.** `guideApi` nhận phản hồi và trả về mảng `TourGuideDTO` cho `AssignmentForm`.
 
-**42.** `AssignmentForm` cập nhật state `guides`, render danh sách `GuideCard` – người dùng thấy danh sách HDV sẵn sàng.
-
-**43.** *(Tùy chọn)* Người dùng thay đổi bộ lọc (`GuideFilter`) → `filters` state thay đổi → `useEffect` kích hoạt lại `fetchGuides()` → lặp lại bước 33–42 với bộ lọc mới.
+**42.** `AssignmentForm` cập nhật state `guides`, render danh sách `GuideCard` – người dùng thấy danh sách HDV sẵn sàng để chọn phân công.
 
 ---
 
-## GIAI ĐOẠN 3 – Lưu phân công
+### Giai đoạn 3A – Phía client: Chọn HDV và submit
 
-### 3A – Phía Client: Chọn HDV và submit
+**43.** Người dùng click vào `GuideCard` của HDV muốn phân công, `handleSelectGuide(guide)` được gọi.
 
-**44.** Người dùng click vào `GuideCard` của HDV phù hợp → `handleSelectGuide(guide)` được gọi.
+**44.** `AssignmentForm` thêm guide vào state `selectedGuides` với vai trò mặc định `LEAD` và ghi chú rỗng.
 
-**45.** `AssignmentForm` thêm guide vào `selectedGuides` state: `{ guideId, guideName, role: 'LEAD', note: '' }`.
+**45.** Người dùng click nút **"💾 Lưu phân công"**, `handleSubmit()` được gọi.
 
-**46.** *(Tùy chọn)* Người dùng chỉnh sửa vai trò (`LEAD` / `ASSISTANT`) hoặc ghi chú → `handleRoleChange()` / `handleNoteChange()` cập nhật `selectedGuides`.
+**46.** `handleSubmit()` kiểm tra `selectedGuides.length > 0` – nếu chưa chọn HDV nào thì hiển thị cảnh báo lỗi và dừng lại, không gửi request.
 
-**47.** Người dùng click nút **"💾 Lưu phân công"** → `handleSubmit()` được gọi.
+**47.** `handleSubmit()` đóng gói dữ liệu thành `AssignmentRequestDTO` gồm `tourId` và danh sách `guides` (mỗi phần tử có `guideId`, `role`, `note`).
 
-**48.** `handleSubmit()` kiểm tra `selectedGuides.length > 0`, nếu rỗng hiện lỗi và dừng.
-
-**49.** `handleSubmit()` đóng gói `AssignmentRequestDTO`:
-```json
-{
-  "tourId": 2,
-  "guides": [
-    { "guideId": 1, "role": "LEAD", "note": "..." },
-    { "guideId": 3, "role": "ASSISTANT", "note": "" }
-  ]
-}
-```
-
-**50.** `handleSubmit()` gọi `assignmentApi.save(request)` – gửi HTTP POST `/api/assignments` với body JSON đến server.
+**48.** `handleSubmit()` gọi `assignmentApi.save(request)` để gửi HTTP POST `/api/assignments` với body JSON lên server.
 
 ---
 
-### 3B – Phía Server: Validate và lưu (TourAssignmentServiceImpl.saveAssignments)
+### Giai đoạn 3B – Phía server: Validate và lưu phân công
 
-**51.** `TourAssignmentController` nhận request, validate `@Valid @RequestBody AssignmentRequestDTO`, gọi `assignmentService.saveAssignments(request)`.
+**49.** `TourAssignmentController` nhận request, validate `@Valid @RequestBody AssignmentRequestDTO`, gọi `assignmentService.saveAssignments(request)`.
 
-**52.** `TourAssignmentServiceImpl.saveAssignments()` gọi `tourRepository.findById(request.getTourId())`.
+**50.** `TourAssignmentServiceImpl.saveAssignments()` gọi `tourRepository.findById(request.getTourId())` để tìm tour theo ID.
 
-**53.** `TourRepository` truy vấn `SELECT * FROM tours WHERE id = ?`.
+**51.** `TourRepository` thực thi truy vấn `SELECT * FROM tours WHERE id = ?`.
 
-**54.** DB trả về entity `Tour`.
+**52.** Database trả về entity `Tour` cho `TourAssignmentServiceImpl`.
 
-**55.** `TourAssignmentServiceImpl` kiểm tra `tour.getStatus()`:
-- Nếu `COMPLETED` hoặc `CANCELLED` → ném `BusinessException` → `GlobalExceptionHandler` bắt → trả HTTP 400.
-- Ngược lại → tiếp tục.
+**53.** `TourAssignmentServiceImpl` kiểm tra `tour.getStatus()` – nếu là `COMPLETED` hoặc `CANCELLED` thì ném `BusinessException`, trả về HTTP 400.
 
-**56.** *[Lặp cho mỗi GuideAssignmentItem trong danh sách guides]*
+_[Vòng lặp – thực hiện cho từng HDV trong danh sách `guides`]_
 
-**57.** `TourAssignmentServiceImpl` gọi `guideRepository.findById(item.getGuideId())`.
+**54.** `TourAssignmentServiceImpl` gọi `guideRepository.findById(item.getGuideId())` để tìm HDV theo ID.
 
-**58.** `TourGuideRepository` truy vấn `SELECT * FROM tour_guides WHERE id = ?`.
+**55.** `TourGuideRepository` thực thi truy vấn `SELECT * FROM tour_guides WHERE id = ?`.
 
-**59.** DB trả về entity `TourGuide`.
+**56.** Database trả về entity `TourGuide`.
 
-**60.** Kiểm tra `guide.getStatus()`:
-- Nếu `INACTIVE` → ném `BusinessException` → HTTP 400.
-- Nếu `ON_LEAVE` → ném `BusinessException` → HTTP 400.
-- Ngược lại → tiếp tục.
+**57.** `TourAssignmentServiceImpl` kiểm tra `guide.getStatus()` – nếu là `INACTIVE` hoặc `ON_LEAVE` thì ném `BusinessException`, trả về HTTP 400.
 
-**61.** `TourAssignmentServiceImpl` gọi `guideRepository.countScheduleOverlaps(guideId, startDate, endDate, tourId)`.
+**58.** `TourAssignmentServiceImpl` gọi `guideRepository.countScheduleOverlaps(guideId, startDate, endDate, tourId)` để kiểm tra HDV có bị trùng lịch không.
 
-**62.** `TourGuideRepository` thực thi JPQL kiểm tra trùng lịch:
-```sql
-SELECT COUNT(a) FROM TourAssignment a
-WHERE a.guide.id = :guideId
-  AND a.status != CANCELLED
-  AND a.tour.id != :excludeTourId
-  AND a.tour.status NOT IN (COMPLETED, CANCELLED)
-  AND a.tour.startDate <= :endDate
-  AND a.tour.endDate >= :startDate
-```
+**59.** `TourGuideRepository` thực thi JPQL đếm số tour khác mà HDV này đang có lịch trùng với khoảng thời gian của tour hiện tại.
 
-**63.** DB trả về số lượng tour bị trùng lịch.
+**60.** Database trả về số lượng tour bị trùng lịch.
 
-**64.** Nếu `overlapCount > 0` → ném `BusinessException` "trùng lịch" → HTTP 400.
+**61.** Nếu `overlapCount > 0` thì ném `BusinessException` báo lỗi trùng lịch, trả về HTTP 400.
 
-**65.** `TourAssignmentServiceImpl` gọi `assignmentRepository.existsByTourIdAndGuideIdAndStatusNot(tourId, guideId, CANCELLED)`.
+**62.** `TourAssignmentServiceImpl` gọi `assignmentRepository.existsByTourIdAndGuideIdAndStatusNot(tourId, guideId, CANCELLED)` để kiểm tra HDV đã được phân công vào tour này chưa.
 
-**66.** `TourAssignmentRepository` truy vấn `SELECT COUNT(*) > 0 FROM tour_assignments WHERE tour_id = ? AND guide_id = ? AND status != 'CANCELLED'`.
+**63.** `TourAssignmentRepository` thực thi truy vấn `SELECT COUNT(*) > 0 FROM tour_assignments WHERE tour_id = ? AND guide_id = ? AND status != 'CANCELLED'`.
 
-**67.** DB trả về `true` / `false`.
+**64.** Database trả về `true` hoặc `false`.
 
-**68.** Nếu `alreadyAssigned = true` → ném `BusinessException` "đã phân công" → HTTP 400.
+**65.** Nếu `alreadyAssigned = true` thì ném `BusinessException` báo HDV đã được phân công rồi, trả về HTTP 400.
 
-**69.** `TourAssignmentServiceImpl` tạo entity `TourAssignment`:
-```java
-TourAssignment.builder()
-    .tour(tour).guide(guide)
-    .role(item.getRole()).note(item.getNote())
-    .status(AssignmentStatus.ASSIGNED)
-    .assignedBy("admin")
-    .build()
-```
+**66.** `TourAssignmentServiceImpl` tạo entity `TourAssignment` mới với `role`, `note`, `status = ASSIGNED` và `assignedBy = "admin"`.
 
-**70.** Gọi `assignmentRepository.save(assignment)`.
+**67.** Gọi `assignmentRepository.save(assignment)` để lưu phân công.
 
-**71.** `TourAssignmentRepository` thực thi `INSERT INTO tour_assignments (tour_id, guide_id, role, note, status, assigned_at, assigned_by) VALUES (...)`.
+**68.** `TourAssignmentRepository` thực thi `INSERT INTO tour_assignments (tour_id, guide_id, role, note, status, assigned_at, assigned_by) VALUES (...)`.
 
-**72.** DB lưu bản ghi và trả về entity `TourAssignment` đã có `id` và `assignedAt`.
+**69.** Database lưu bản ghi và trả về entity `TourAssignment` đã có `id` và `assignedAt`.
 
-**73.** `TourAssignmentRepository` trả về entity đã lưu cho `TourAssignmentServiceImpl`.
+**70.** `TourAssignmentRepository` trả về entity đã lưu cho `TourAssignmentServiceImpl`.
 
-**74.** *[Kết thúc vòng lặp – lặp lại bước 56–73 cho mỗi guide]*
+_[Kết thúc vòng lặp – lặp lại bước 54–70 cho mỗi HDV trong danh sách]_
 
 ---
 
-### 3C – Cập nhật trạng thái tour và trả về kết quả
+### Giai đoạn 3C – Cập nhật trạng thái tour
 
-**75.** `TourAssignmentServiceImpl` gọi `updateTourStatusIfNeeded(tour)`.
+**71.** `TourAssignmentServiceImpl` gọi hàm `updateTourStatusIfNeeded(tour)` để kiểm tra và cập nhật trạng thái tour nếu cần.
 
-**76.** Trong `updateTourStatusIfNeeded()`: gọi `assignmentRepository.countActiveAssignmentsByTourId(tour.getId())`.
+**72.** `updateTourStatusIfNeeded()` gọi `assignmentRepository.countActiveAssignmentsByTourId(tour.getId())` để đếm tổng số HDV đang được phân công cho tour.
 
-**77.** `TourAssignmentRepository` truy vấn đếm phân công đang hoạt động cho tour.
+**73.** `TourAssignmentRepository` thực thi truy vấn đếm số phân công đang hoạt động theo `tourId`.
 
-**78.** DB trả về số lượng HDV đang hoạt động.
+**74.** Database trả về số lượng HDV đang được phân công cho tour.
 
-**79.** Nếu `currentCount >= tour.getMinGuides()` và `tour.getStatus() == PLANNING`:
-- Gọi `tour.setStatus(TourStatus.OPEN)`.
-- Gọi `tourRepository.save(tour)`.
-- DB cập nhật `UPDATE tours SET status = 'OPEN' WHERE id = ?`.
+**75.** Nếu `currentCount >= tour.getMinGuides()` và trạng thái tour đang là `PLANNING`, thì gọi `tour.setStatus(OPEN)` và `tourRepository.save(tour)` để cập nhật – Database thực thi `UPDATE tours SET status = 'OPEN' WHERE id = ?`.
 
-**80.** `TourAssignmentServiceImpl` đóng gói `List<TourAssignment>` → `List<AssignmentDTO>` (gọi `toDTO()` cho mỗi phần tử).
+**76.** `TourAssignmentServiceImpl` đóng gói `List<TourAssignment>` vừa lưu thành `List<AssignmentDTO>` (gọi `toDTO()` cho từng phần tử).
 
-**81.** `TourAssignmentController` bọc kết quả vào `ApiResponse.ok("Phân công ... thành công!", result)` và trả về HTTP 200.
+**77.** `TourAssignmentController` bọc kết quả vào `ApiResponse.ok("Phân công thành công!", result)` và trả về HTTP 200.
 
 ---
 
-### 3D – Client nhận kết quả và hiển thị
+### Giai đoạn 3D – Client nhận kết quả và hiển thị
 
-**82.** `assignmentApi` nhận phản hồi HTTP 200, trả về `res` (object `ApiResponse`) cho `handleSubmit()`.
+**78.** `assignmentApi` nhận phản hồi HTTP 200 và trả về object `ApiResponse` cho `handleSubmit()`.
 
-**83.** `handleSubmit()` lấy `res.message` → cập nhật state `successMsg`.
+**79.** `handleSubmit()` lấy `res.message` và cập nhật state `successMsg` để hiển thị thông báo thành công.
 
-**84.** `handleSubmit()` gọi `setSelectedGuides([])` để reset lựa chọn.
+**80.** `handleSubmit()` gọi `setSelectedGuides([])` để reset danh sách HDV đã chọn về rỗng.
 
-**85.** `handleSubmit()` gọi `onSuccess()` callback từ `TourDetailPage`.
+**81.** `handleSubmit()` gọi `onSuccess()` callback từ `TourDetailPage`.
 
-**86.** `TourDetailPage.onSuccess()` gọi `fetchTour()` để reload chi tiết tour (cập nhật danh sách HDV mới).
+**82.** `TourDetailPage.onSuccess()` gọi lại `fetchTour()` để reload chi tiết tour, cập nhật danh sách HDV mới vừa phân công.
 
-**87.** `AssignmentForm` render `SuccessAlert` với thông báo thành công – người dùng thấy kết quả phân công.
+**83.** `AssignmentForm` hiển thị `SuccessAlert` với thông báo thành công – người dùng thấy kết quả phân công.
 
 ---
 
 ## Luồng thay thế – Trường hợp lỗi
 
-| Tình huống | Xảy ra tại bước | Kết quả |
-|---|---|---|
-| Tour không tồn tại | 52–54 | `ResourceNotFoundException` → HTTP 404 → FE hiện "Không tìm thấy Tour" |
-| Tour đã hủy / hoàn thành | 55 | `BusinessException` → HTTP 400 → FE hiện "Không thể phân công..." |
-| HDV không tồn tại | 57–59 | `ResourceNotFoundException` → HTTP 404 |
-| HDV không hoạt động (INACTIVE/ON_LEAVE) | 60 | `BusinessException` → HTTP 400 → FE hiện tên HDV + lý do |
-| HDV bị trùng lịch | 61–64 | `BusinessException` → HTTP 400 → FE hiện khoảng thời gian trùng |
-| HDV đã được phân công | 65–68 | `BusinessException` → HTTP 400 → FE hiện "đã được phân công rồi" |
-| Lỗi hệ thống (DB down, v.v.) | Bất kỳ | `Exception` → `GlobalExceptionHandler` → HTTP 500 → FE hiện "Lỗi hệ thống" |
-| Không chọn HDV nào | 48 | Xử lý tại FE, không gọi API → hiện "Vui lòng chọn ít nhất một HDV" |
+| Tình huống                              | Xảy ra tại bước | Kết quả                                                                    |
+| --------------------------------------- | --------------- | -------------------------------------------------------------------------- |
+| Tour không tồn tại                      | 50–52           | `ResourceNotFoundException` → HTTP 404 → FE hiện "Không tìm thấy Tour"     |
+| Tour đã hủy / hoàn thành                | 53              | `BusinessException` → HTTP 400 → FE hiện "Không thể phân công..."          |
+| HDV không tồn tại                       | 54–56           | `ResourceNotFoundException` → HTTP 404                                     |
+| HDV không hoạt động (INACTIVE/ON_LEAVE) | 57              | `BusinessException` → HTTP 400 → FE hiện tên HDV + lý do                   |
+| HDV bị trùng lịch                       | 58–61           | `BusinessException` → HTTP 400 → FE hiện khoảng thời gian trùng            |
+| HDV đã được phân công                   | 62–65           | `BusinessException` → HTTP 400 → FE hiện "đã được phân công rồi"           |
+| Lỗi hệ thống (DB down, v.v.)            | Bất kỳ          | `Exception` → `GlobalExceptionHandler` → HTTP 500 → FE hiện "Lỗi hệ thống" |
+| Không chọn HDV nào                      | 46              | Xử lý tại FE, không gọi API → hiện "Vui lòng chọn ít nhất một HDV"         |
