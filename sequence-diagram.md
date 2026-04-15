@@ -80,33 +80,43 @@
 
 ### Giai đoạn 2B – Mở form phân công và tải danh sách HDV
 
-**29.** Người dùng click nút **"+ Phân công"**, `TourDetailPage` cập nhật state `showAssignForm = true`.
+**29.** Người dùng click nút **"+ Phân công"**. `TourDetailPage` kiểm tra `canAssign = ['PLANNING','OPEN'].includes(tour.status)`:
+  - Nếu `canAssign = false` → nút bị disable và hiển thị banner thông báo lý do (ví dụ "Tour đang diễn ra, không thể thay đổi phân công"); luồng dừng tại đây.
+  - Nếu `canAssign = true` → cập nhật state `showAssignForm = true`, tiếp tục bước 30.
 
 **30.** `TourDetailPage` render component `AssignmentForm` (modal), truyền `tour` và `existingAssignments` qua props.
 
-**31.** `AssignmentForm` khởi tạo với bộ lọc mặc định `{ status: 'AVAILABLE', specialization: '', language: '', region: '' }`.
+**31.** `AssignmentForm` khởi tạo với bộ lọc mặc định `{ specialization: '', language: '', region: '' }` (không có `status` – BE tự xác định tính phù hợp theo ngày tour).
 
 **32.** `useEffect` trong `AssignmentForm` kích hoạt `fetchGuides()` ngay khi component được mount.
 
-**33.** `fetchGuides()` gọi `guideApi.getAll({ status: 'AVAILABLE' })` để gửi HTTP GET `/api/guides?status=AVAILABLE` lên server.
+**33.** `fetchGuides()` gọi `guideApi.getForTour(tour.id, filters)` để gửi HTTP GET `/api/guides/for-tour/{tourId}` lên server.
 
-**34.** `TourGuideController` nhận request, chuyển đổi query param `status` thành enum `GuideStatus.AVAILABLE` và gọi `guideService.filterGuides(AVAILABLE, null, null, null)`.
+**34.** `TourGuideController` nhận request và gọi `guideService.getGuidesForTour(tourId, specialization, language, region)`.
 
-**35.** `TourGuideServiceImpl.filterGuides()` gọi `guideRepository.findByFilters(status, specialization, language, region)`.
+**35.** `TourGuideServiceImpl.getGuidesForTour()` gọi `tourRepository.findById(tourId)` để lấy `startDate` và `endDate` của tour.
 
-**36.** `TourGuideRepository` thực thi JPQL `SELECT g FROM TourGuide g WHERE g.status = :status ... ORDER BY g.fullName ASC` để truy vấn bảng `tour_guides` lọc theo trạng thái và các tiêu chí.
+**36.** `TourGuideServiceImpl` gọi `guideRepository.findGuideIdsWithScheduleOverlap(startDate, endDate, tourId)` để lấy **tập ID HDV** đang bị trùng lịch (1 query duy nhất thay vì N query).
 
-**37.** Database trả về danh sách entity `TourGuide` thỏa điều kiện lọc.
+**37.** `TourGuideRepository` thực thi JPQL đếm tất cả `TourAssignment` có `tour.startDate <= endDate AND tour.endDate >= startDate` (ngoại trừ chính tour này, loại trừ tour COMPLETED/CANCELLED), trả về `List<Long>`.
 
-**38.** `TourGuideRepository` trả về `List<TourGuide>` cho `TourGuideServiceImpl`.
+**38.** `TourGuideServiceImpl` gọi `guideRepository.findByFilters(null, specialization, language, region)` để lấy toàn bộ HDV (không lọc status).
 
-**39.** `TourGuideServiceImpl` đóng gói từng `TourGuide` thành `TourGuideDTO` (gọi `toDTO()`), trả về `List<TourGuideDTO>`.
+**39.** `TourGuideServiceImpl` map từng `TourGuide` sang `TourGuideDTO`, tính `availabilityWarning`:
+  - `INACTIVE` → `"Hướng dẫn viên không hoạt động"`
+  - `ON_LEAVE` → `"Hướng dẫn viên đang nghỉ phép"`
+  - ID nằm trong tập overlap → `"Trùng lịch với tour khác"`
+  - Còn lại → `null` (eligible = true)
+
+  Kết quả được sắp xếp: **eligible=true lên trước**, trong nhóm sắp theo tên.
 
 **40.** `TourGuideController` bọc kết quả vào `ApiResponse.ok(...)` và trả về HTTP 200.
 
 **41.** `guideApi` nhận phản hồi và trả về mảng `TourGuideDTO` cho `AssignmentForm`.
 
-**42.** `AssignmentForm` cập nhật state `guides`, render danh sách `GuideCard` – người dùng thấy danh sách HDV sẵn sàng để chọn phân công.
+**42.** `AssignmentForm` tách mảng thành `eligibleGuides` và `ineligibleGuides`, render 2 nhóm riêng biệt:
+  - **Nhóm 1 "✅ Phù hợp"**: `GuideCard` bình thường, có thể click chọn.
+  - **Nhóm 2 "⚠ Không thể phân công"**: `GuideCard` mờ, có badge cảnh báo màu vàng, không thể chọn.
 
 ---
 
@@ -136,7 +146,7 @@
 
 **52.** Database trả về entity `Tour` cho `TourAssignmentServiceImpl`.
 
-**53.** `TourAssignmentServiceImpl` kiểm tra `tour.getStatus()` – nếu là `COMPLETED` hoặc `CANCELLED` thì ném `BusinessException`, trả về HTTP 400.
+**53.** `TourAssignmentServiceImpl` kiểm tra `tour.getStatus()` – chỉ cho phép phân công nếu status là `PLANNING` hoặc `OPEN`; các trạng thái `FULL`, `ONGOING`, `COMPLETED`, `CANCELLED` đều ném `BusinessException` với mô tả cụ thể, trả về HTTP 400.
 
 _[Vòng lặp – thực hiện cho từng HDV trong danh sách `guides`]_
 
@@ -217,7 +227,7 @@ _[Kết thúc vòng lặp – lặp lại bước 54–70 cho mỗi HDV trong da
 | Tình huống                              | Xảy ra tại bước | Kết quả                                                                    |
 | --------------------------------------- | --------------- | -------------------------------------------------------------------------- |
 | Tour không tồn tại                      | 50–52           | `ResourceNotFoundException` → HTTP 404 → FE hiện "Không tìm thấy Tour"     |
-| Tour đã hủy / hoàn thành                | 53              | `BusinessException` → HTTP 400 → FE hiện "Không thể phân công..."          |
+| Tour không ở trạng thái PLANNING/OPEN    | 29 (FE), 53 (BE) | FE: disable nút + banner lý do; BE: `BusinessException` → HTTP 400        |
 | HDV không tồn tại                       | 54–56           | `ResourceNotFoundException` → HTTP 404                                     |
 | HDV không hoạt động (INACTIVE/ON_LEAVE) | 57              | `BusinessException` → HTTP 400 → FE hiện tên HDV + lý do                   |
 | HDV bị trùng lịch                       | 58–61           | `BusinessException` → HTTP 400 → FE hiện khoảng thời gian trùng            |
