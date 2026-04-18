@@ -5,6 +5,7 @@
 
 -- Xóa bảng nếu tồn tại (theo thứ tự phụ thuộc)
 DROP TABLE IF EXISTS tour_assignments;
+DROP TABLE IF EXISTS tour_itineraries;
 DROP TABLE IF EXISTS bookings;
 DROP TABLE IF EXISTS tours;
 DROP TABLE IF EXISTS tour_guides;
@@ -89,6 +90,31 @@ CREATE TABLE tours (
   COMMENT='Bảng quản lý thông tin tour du lịch';
 
 -- ============================================================
+-- BẢNG: tour_itineraries
+-- Mô tả: Lịch trình chi tiết theo ngày / hoạt động của từng tour
+-- ============================================================
+CREATE TABLE tour_itineraries (
+    id              BIGINT          NOT NULL AUTO_INCREMENT,
+    tour_id         BIGINT          NOT NULL COMMENT 'FK → tours.id',
+    day_number      INT             NOT NULL COMMENT 'Thứ tự ngày trong tour (1, 2, 3, ...)',
+    sequence_order  INT             NOT NULL COMMENT 'Thứ tự hoạt động trong ngày',
+    title           VARCHAR(200)    NOT NULL COMMENT 'Tiêu đề hoạt động / điểm dừng',
+    description     TEXT            NULL     COMMENT 'Mô tả chi tiết',
+    location        VARCHAR(200)    NULL     COMMENT 'Địa điểm',
+    start_time      TIME            NULL     COMMENT 'Giờ bắt đầu (nếu có)',
+    end_time        TIME            NULL     COMMENT 'Giờ kết thúc (nếu có)',
+    activity_type   VARCHAR(100)    NULL     COMMENT 'Loại hoạt động (vd: tham quan, nghỉ, ăn)',
+    note            TEXT            NULL     COMMENT 'Ghi chú thêm',
+    is_optional     TINYINT(1)      NOT NULL DEFAULT 0 COMMENT 'Hoạt động tùy chọn (0/1)',
+
+    CONSTRAINT pk_tour_itineraries PRIMARY KEY (id),
+    CONSTRAINT fk_itineraries_tour FOREIGN KEY (tour_id) REFERENCES tours(id) ON DELETE CASCADE,
+    CONSTRAINT chk_day_number        CHECK (day_number >= 1),
+    CONSTRAINT chk_sequence_order  CHECK (sequence_order >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='Bảng lịch trình chi tiết theo tour';
+
+-- ============================================================
 -- BẢNG: bookings
 -- Mô tả: Lưu thông tin đặt tour của khách hàng
 --        Mối quan hệ N-N giữa Customer và Tour
@@ -161,6 +187,10 @@ CREATE INDEX idx_tours_status          ON tours (status);
 CREATE INDEX idx_tours_start_date      ON tours (start_date);
 CREATE INDEX idx_tours_destination     ON tours (destination);
 
+-- tour_itineraries: thứ tự theo tour và ngày
+CREATE INDEX idx_itineraries_tour_id   ON tour_itineraries (tour_id);
+CREATE INDEX idx_itineraries_tour_day  ON tour_itineraries (tour_id, day_number, sequence_order);
+
 -- tour_guides: tra cứu theo trạng thái, vùng
 CREATE INDEX idx_guides_status         ON tour_guides (status);
 CREATE INDEX idx_guides_region         ON tour_guides (region);
@@ -176,18 +206,19 @@ CREATE INDEX idx_assignments_status    ON tour_assignments (status);
 --
 --  customers (1) ────────────── (*) bookings (*) ────────────── (1) tours
 --                                                                     |
---                                                                     | (1)
---                                                                     |
---                                                               tour_assignments
---                                                                     |
---                                                                     | (*)
---                                                                     |
---                                                              (1) tour_guides
+--                                                    ┌────────────────┴────────────────┐
+--                                                    |                                 |
+--                                             tour_assignments              tour_itineraries
+--                                                    |                                 |
+--                                                    | (*)                             | (*)
+--                                                    |                                 |
+--                                             (1) tour_guides                        (chi tiết lịch trình)
 --
 --  Ghi chú:
---  • customers  : khách hàng đặt tour
---  • tours      : thông tin tour du lịch
---  • bookings   : đơn đặt tour (Customer ↔ Tour), lưu giá snapshot
---  • tour_guides: hướng dẫn viên du lịch
---  • tour_assignments: phân công HDV vào tour (Tour ↔ TourGuide)
+--  • customers         : khách hàng đặt tour
+--  • tours             : thông tin tour du lịch
+--  • bookings          : đơn đặt tour (Customer ↔ Tour), lưu giá snapshot
+--  • tour_guides       : hướng dẫn viên du lịch
+--  • tour_assignments  : phân công HDV vào tour (Tour ↔ TourGuide)
+--  • tour_itineraries  : lịch trình theo ngày / hoạt động (thuộc Tour)
 -- ============================================================

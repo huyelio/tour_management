@@ -28,4 +28,5 @@ public class TourDetailDTO {
     private Integer minGuides;
     private String departureRegion;
     private List<AssignmentDTO> assignments;
+    private List<TourItineraryDTO> itineraries;
 }

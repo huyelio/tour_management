@@ -77,6 +77,20 @@ class TourAssignment {
   -assignedBy : String
 }
 
+class TourItinerary {
+  -id : Long
+  -dayNumber : Integer
+  -sequenceOrder : Integer
+  -title : String
+  -description : String
+  -location : String
+  -startTime : LocalTime
+  -endTime : LocalTime
+  -activityType : String
+  -note : String
+  -isOptional : Boolean
+}
+
 enum TourStatus {
   PLANNING
   OPEN
@@ -108,6 +122,7 @@ enum AssignmentStatus {
 
 Tour "1" *-down- "*" Booking : có
 Tour "1" *-right- "*" TourAssignment : phân công
+Tour "1" *-left- "*" TourItinerary : lịch trình
 
 Customer "1" o-down- "*" Booking : đặt
 

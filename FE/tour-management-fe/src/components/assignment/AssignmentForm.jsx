@@ -17,7 +17,8 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
   // Danh sách guide đã chọn: [{ guideId, role, note }]
   const [selectedGuides, setSelectedGuides] = useState([])
 
-  const [filters, setFilters] = useState({ status: 'AVAILABLE', specialization: '', language: '', region: '' })
+  // Không có filter status – BE tự tính eligible/warning theo ngày tour
+  const [filters, setFilters] = useState({ specialization: '', language: '', region: '' })
 
   // ID các guide đã được phân công (status != CANCELLED)
   const assignedGuideIds = (existingAssignments || [])
@@ -31,7 +32,7 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
   const fetchGuides = async () => {
     try {
       setLoading(true)
-      const res = await guideApi.getAll(filters)
+      const res = await guideApi.getForTour(tour.id, filters)
       setGuides(res.data || [])
     } catch (err) {
       setError(err.message)
@@ -39,6 +40,10 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
       setLoading(false)
     }
   }
+
+  // Tách 2 nhóm: eligible và ineligible (BE đã sort eligible lên trước, FE chỉ tách để header riêng)
+  const eligibleGuides = guides.filter(g => g.eligible)
+  const ineligibleGuides = guides.filter(g => !g.eligible)
 
   const handleSelectGuide = (guide) => {
     const exists = selectedGuides.find(g => g.guideId === guide.id)
@@ -117,8 +122,8 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
           {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
           {successMsg && <SuccessAlert message={successMsg} onClose={() => setSuccessMsg(null)} />}
 
-          {/* Bộ lọc */}
-          <GuideFilter filters={filters} onChange={setFilters} />
+          {/* Bộ lọc – ẩn select Trạng thái vì BE đã xử lý theo ngày tour */}
+          <GuideFilter filters={filters} onChange={setFilters} hideStatus />
 
           {/* Danh sách đã chọn */}
           {selectedGuides.length > 0 && (
@@ -168,31 +173,78 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
             </div>
           )}
 
-          {/* Danh sách hướng dẫn viên */}
-          <h4 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 600, color: '#374151' }}>
-            Danh sách hướng dẫn viên {loading ? '' : `(${guides.length} người)`}
-          </h4>
-
+          {/* Danh sách hướng dẫn viên – 2 nhóm */}
           {loading ? (
             <LoadingSpinner text="Đang tải danh sách hướng dẫn viên..." />
           ) : guides.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
               <div style={{ fontSize: '40px' }}>👤</div>
-              <p>Không tìm thấy hướng dẫn viên phù hợp</p>
+              <p>Không tìm thấy hướng dẫn viên</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-              {guides.map(guide => (
-                <GuideCard
-                  key={guide.id}
-                  guide={guide}
-                  selectable={true}
-                  selected={isSelected(guide.id)}
-                  onSelect={handleSelectGuide}
-                  alreadyAssigned={assignedGuideIds.includes(guide.id)}
-                />
-              ))}
-            </div>
+            <>
+              {/* Nhóm 1 – Phù hợp */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  marginBottom: '12px', padding: '6px 12px',
+                  background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0',
+                }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#15803d' }}>
+                    ✅ Phù hợp với tour ({eligibleGuides.length} người)
+                  </span>
+                </div>
+                {eligibleGuides.length === 0 ? (
+                  <p style={{ color: '#9ca3af', fontSize: '13px', paddingLeft: '8px' }}>
+                    Không có hướng dẫn viên nào phù hợp với bộ lọc hiện tại
+                  </p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {eligibleGuides.map(guide => (
+                      <GuideCard
+                        key={guide.id}
+                        guide={guide}
+                        selectable={true}
+                        selected={isSelected(guide.id)}
+                        onSelect={handleSelectGuide}
+                        alreadyAssigned={assignedGuideIds.includes(guide.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Nhóm 2 – Không phù hợp */}
+              {ineligibleGuides.length > 0 && (
+                <div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginBottom: '12px', padding: '6px 12px',
+                    background: '#fffbeb', borderRadius: '8px', border: '1px solid #fcd34d',
+                  }}>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#92400e' }}>
+                      ⚠ Không thể phân công ({ineligibleGuides.length} người)
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#b45309' }}>
+                      – bị trùng lịch hoặc không hoạt động
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                    {ineligibleGuides.map(guide => (
+                      <GuideCard
+                        key={guide.id}
+                        guide={guide}
+                        selectable={true}
+                        selected={false}
+                        onSelect={null}
+                        alreadyAssigned={assignedGuideIds.includes(guide.id)}
+                        warning={guide.availabilityWarning}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

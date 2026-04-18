@@ -1,19 +1,25 @@
 import Badge from '../common/Badge'
 import { getGuideStatusColor, getGuideStatusLabel } from '../../utils/helpers'
 
-const GuideCard = ({ guide, selectable, selected, onSelect, alreadyAssigned }) => {
-  const isDisabled = guide.status !== 'AVAILABLE' || alreadyAssigned
+// warning  : string (từ BE) – nếu có → HDV không đủ điều kiện, disable chọn
+// alreadyAssigned : boolean – đã phân công tour này rồi → disable chọn
+const GuideCard = ({ guide, selectable, selected, onSelect, alreadyAssigned, warning }) => {
+  const isDisabled = !!warning || alreadyAssigned
 
   return (
     <div
       onClick={() => !isDisabled && selectable && onSelect && onSelect(guide)}
       style={{
-        background: '#fff',
+        background: warning ? '#fffbeb' : '#fff',
         borderRadius: '10px',
-        border: selected ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+        border: selected
+          ? '2px solid #3b82f6'
+          : warning
+            ? '1px solid #fcd34d'
+            : '1px solid #e5e7eb',
         padding: '16px',
         cursor: isDisabled ? 'not-allowed' : (selectable ? 'pointer' : 'default'),
-        opacity: isDisabled ? 0.6 : 1,
+        opacity: isDisabled ? 0.65 : 1,
         transition: 'all 0.2s',
         position: 'relative',
         boxShadow: selected ? '0 0 0 3px rgba(59,130,246,0.2)' : 'none',
@@ -28,12 +34,21 @@ const GuideCard = ({ guide, selectable, selected, onSelect, alreadyAssigned }) =
         }}>✓</div>
       )}
 
-      {alreadyAssigned && (
+      {alreadyAssigned && !warning && (
         <div style={{
           position: 'absolute', top: '10px', right: '10px',
           background: '#10b981', color: '#fff', borderRadius: '12px',
           padding: '2px 8px', fontSize: '11px', fontWeight: 700,
         }}>Đã phân công</div>
+      )}
+
+      {warning && (
+        <div style={{
+          position: 'absolute', top: '10px', right: '10px',
+          background: '#f59e0b', color: '#fff', borderRadius: '12px',
+          padding: '2px 8px', fontSize: '11px', fontWeight: 700,
+          maxWidth: '160px', textAlign: 'right',
+        }}>⚠ {warning}</div>
       )}
 
       <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>

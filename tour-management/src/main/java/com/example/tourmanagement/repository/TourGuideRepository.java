@@ -57,4 +57,24 @@ public interface TourGuideRepository extends JpaRepository<TourGuide, Long> {
         @Param("endDate") LocalDate endDate,
         @Param("excludeTourId") Long excludeTourId
     );
+
+    /**
+     * Trả về danh sách ID hướng dẫn viên đang có phân công trùng lịch
+     * với khoảng [startDate, endDate] của một tour (loại trừ chính tour đó).
+     * Dùng để pre-compute cảnh báo trùng lịch khi load danh sách HDV.
+     */
+    @Query(
+        "SELECT a.guide.id FROM TourAssignment a WHERE "
+            + "a.status != com.example.tourmanagement.model.enums.AssignmentStatus.CANCELLED AND "
+            + "a.tour.id != :excludeTourId AND "
+            + "a.tour.status NOT IN ("
+            + "com.example.tourmanagement.model.enums.TourStatus.COMPLETED, "
+            + "com.example.tourmanagement.model.enums.TourStatus.CANCELLED) AND "
+            + "a.tour.startDate <= :endDate AND a.tour.endDate >= :startDate"
+    )
+    List<Long> findGuideIdsWithScheduleOverlap(
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate,
+        @Param("excludeTourId") Long excludeTourId
+    );
 }

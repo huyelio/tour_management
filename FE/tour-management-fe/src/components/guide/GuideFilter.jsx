@@ -1,4 +1,5 @@
-const GuideFilter = ({ filters, onChange }) => {
+// hideStatus: true → ẩn select Trạng thái (dùng trong AssignmentForm vì status được BE xử lý)
+const GuideFilter = ({ filters, onChange, hideStatus = false }) => {
   const selectStyle = {
     padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px',
     fontSize: '13px', background: '#fff', cursor: 'pointer', outline: 'none',
@@ -18,16 +19,18 @@ const GuideFilter = ({ filters, onChange }) => {
         🔍 Bộ lọc hướng dẫn viên
       </h4>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px' }}>
-        <div>
-          <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Trạng thái</label>
-          <select style={selectStyle} value={filters.status} onChange={e => onChange({ ...filters, status: e.target.value })}>
-            <option value="">Tất cả</option>
-            <option value="AVAILABLE">Sẵn sàng</option>
-            <option value="ON_TOUR">Đang dẫn tour</option>
-            <option value="ON_LEAVE">Nghỉ phép</option>
-            <option value="INACTIVE">Ngừng hoạt động</option>
-          </select>
-        </div>
+        {!hideStatus && (
+          <div>
+            <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Trạng thái</label>
+            <select style={selectStyle} value={filters.status} onChange={e => onChange({ ...filters, status: e.target.value })}>
+              <option value="">Tất cả</option>
+              <option value="AVAILABLE">Sẵn sàng</option>
+              <option value="ON_TOUR">Đang dẫn tour</option>
+              <option value="ON_LEAVE">Nghỉ phép</option>
+              <option value="INACTIVE">Ngừng hoạt động</option>
+            </select>
+          </div>
+        )}
 
         <div>
           <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Chuyên môn</label>

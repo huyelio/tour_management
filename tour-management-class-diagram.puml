@@ -1,0 +1,561 @@
+@startuml TourManagement_Only_ClassDiagram
+
+' ============================
+' THEME & LAYOUT
+' ============================
+skinparam backgroundColor #F8FAFC
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+skinparam class {
+    BackgroundColor     #DBEAFE
+    BorderColor         #1D4ED8
+    HeaderBackgroundColor #1D4ED8
+    HeaderFontColor     #FFFFFF
+    HeaderFontStyle     bold
+    FontColor           #1E293B
+    BorderThickness     1.5
+    RoundCorner         8
+}
+
+skinparam interface {
+    BackgroundColor     #EDE9FE
+    BorderColor         #7C3AED
+    HeaderBackgroundColor #7C3AED
+    HeaderFontColor     #FFFFFF
+    HeaderFontStyle     bold
+}
+
+skinparam enum {
+    BackgroundColor     #FEF3C7
+    BorderColor         #D97706
+    HeaderBackgroundColor #D97706
+    HeaderFontColor     #FFFFFF
+    HeaderFontStyle     bold
+}
+
+skinparam note {
+    BackgroundColor     #F0FDF4
+    BorderColor         #16A34A
+}
+
+skinparam package {
+    BackgroundColor     #F1F5F9
+    BorderColor         #64748B
+    FontStyle           bold
+    FontColor           #1E293B
+}
+
+skinparam arrow {
+    Color               #374151
+    Thickness           1.5
+}
+
+' ============================
+' CLIENT – ReactJS
+' ============================
+package "Client – ReactJS" #E0F2FE {
+
+    package "pages" {
+        class TourListPage {
+            +render() : JSX
+        }
+
+        class TourDetailPage {
+            -id          : String
+            -tour        : TourDetailDTO
+            -loading     : boolean
+            -error       : String
+            -success     : String
+            -showTourForm: boolean
+            +fetchTour() : void
+            +handleCancelTour() : void
+            +render()    : JSX
+        }
+    }
+
+    package "components/tour" {
+        class TourList {
+            -tours            : TourSummaryDTO[]
+            -loading          : boolean
+            -error            : String
+            -success          : String
+            -search           : String
+            -statusFilter     : String
+            -assignmentFilter : String
+            -showForm         : boolean
+            -editingTour      : Object
+            +fetchTours()     : void
+            +handleEdit(tour) : void
+            +handleCancel(id, name) : void
+            +handleFormSuccess()    : void
+            +render()         : JSX
+        }
+
+        class TourCard {
+            -tour     : TourSummaryDTO
+            -onEdit   : Function
+            -onCancel : Function
+            +render() : JSX
+        }
+
+        class TourForm {
+            -tour    : TourSummaryDTO
+            -form    : Object
+            -loading : boolean
+            -error   : String
+            +handleSubmit() : void
+            +render()       : JSX
+        }
+    }
+
+    package "components/itinerary" {
+        class ItineraryList {
+            -tourId       : Long
+            -durationDays : Integer
+            -tourStatus   : String
+            -itineraries  : TourItineraryDTO[]
+            -loading      : boolean
+            -error        : String
+            -showForm     : boolean
+            -editingItem  : Object
+            +fetchItineraries() : void
+            +handleDelete(item) : void
+            +render()           : JSX
+        }
+
+        class ItineraryForm {
+            -tourId       : Long
+            -durationDays : Integer
+            -itinerary    : TourItineraryDTO
+            -form         : Object
+            -loading      : boolean
+            -error        : String
+            +handleSubmit() : void
+            +render()       : JSX
+        }
+    }
+
+    package "api (axios)" {
+        class tourApi {
+            +getAll(activeOnly) : Promise<ApiResponse>
+            +getById(id)        : Promise<ApiResponse>
+            +create(data)       : Promise<ApiResponse>
+            +update(id, data)   : Promise<ApiResponse>
+            +cancel(id)         : Promise<ApiResponse>
+        }
+
+        class itineraryApi {
+            +getByTour(tourId)            : Promise<ApiResponse>
+            +create(tourId, data)         : Promise<ApiResponse>
+            +update(tourId, itemId, data) : Promise<ApiResponse>
+            +delete(tourId, itemId)       : Promise<ApiResponse>
+        }
+    }
+}
+
+' ============================
+' SERVER – Spring Boot
+' ============================
+package "Server – Spring Boot" #E8F5E9 {
+
+    ' ---- Controller ----
+    package "Controller Layer" {
+        class TourController {
+            -tourService : TourService
+            +getAllTours(activeOnly, keyword, status) : ResponseEntity
+            +getTourById(id : Long) : ResponseEntity
+            +createTour(request : TourRequestDTO) : ResponseEntity
+            +updateTour(id : Long, request : TourRequestDTO) : ResponseEntity
+            +cancelTour(id : Long) : ResponseEntity
+        }
+
+        class TourItineraryController {
+            -itineraryService : TourItineraryService
+            +getItineraries(tourId : Long) : ResponseEntity
+            +createItinerary(tourId : Long, req : TourItineraryRequestDTO) : ResponseEntity
+            +updateItinerary(tourId : Long, itemId : Long, req : TourItineraryRequestDTO) : ResponseEntity
+            +deleteItinerary(tourId : Long, itemId : Long) : ResponseEntity
+        }
+    }
+
+    ' ---- Service Interface ----
+    package "Service Layer (Interface)" {
+        interface TourService <<interface>> {
+            +getAllTours() : List<TourSummaryDTO>
+            +getActiveTours() : List<TourSummaryDTO>
+            +searchTours(keyword, status) : List<TourSummaryDTO>
+            +getTourById(id : Long) : TourDetailDTO
+            +createTour(request : TourRequestDTO) : TourSummaryDTO
+            +updateTour(id : Long, request : TourRequestDTO) : TourSummaryDTO
+            +cancelTour(id : Long) : void
+        }
+
+        interface TourItineraryService <<interface>> {
+            +getByTourId(tourId : Long) : List<TourItineraryDTO>
+            +create(tourId : Long, request : TourItineraryRequestDTO) : TourItineraryDTO
+            +update(tourId, itemId, request) : TourItineraryDTO
+            +delete(tourId : Long, itemId : Long) : void
+        }
+    }
+
+    ' ---- Service Impl ----
+    package "Service Layer (Impl)" {
+        class TourServiceImpl {
+            -tourRepository      : TourRepository
+            -itineraryRepository : TourItineraryRepository
+            +getAllTours() : List<TourSummaryDTO>
+            +getActiveTours() : List<TourSummaryDTO>
+            +searchTours(keyword, status) : List<TourSummaryDTO>
+            +getTourById(id : Long) : TourDetailDTO
+            +createTour(request : TourRequestDTO) : TourSummaryDTO
+            +updateTour(id : Long, request : TourRequestDTO) : TourSummaryDTO
+            +cancelTour(id : Long) : void
+            -toSummaryDTO(tour : Tour) : TourSummaryDTO
+            -toDetailDTO(tour, itineraries) : TourDetailDTO
+            -toItineraryDTO(it : TourItinerary) : TourItineraryDTO
+        }
+
+        class TourItineraryServiceImpl {
+            -itineraryRepository : TourItineraryRepository
+            -tourRepository      : TourRepository
+            +getByTourId(tourId : Long) : List<TourItineraryDTO>
+            +create(tourId, request) : TourItineraryDTO
+            +update(tourId, itemId, request) : TourItineraryDTO
+            +delete(tourId : Long, itemId : Long) : void
+            -validateTourEditable(tour : Tour) : void
+            -validateDayNumber(dayNumber, durationDays) : void
+            -validateTime(request) : void
+            -toDTO(it : TourItinerary) : TourItineraryDTO
+        }
+    }
+
+    ' ---- Repository ----
+    package "Repository (DAO) Layer" {
+        interface TourRepository <<interface>> {
+            +findByCode(code : String) : Optional<Tour>
+            +existsByCode(code : String) : boolean
+            +existsByCodeAndIdNot(code, id) : boolean
+            +findByIdWithAssignments(id : Long) : Optional<Tour>
+            +findActiveTours() : List<Tour>
+            +searchTours(keyword, status) : List<Tour>
+        }
+
+        interface TourItineraryRepository <<interface>> {
+            +findByTourIdOrderByDayNumberAscSequenceOrderAsc(tourId) : List<TourItinerary>
+            +existsByTourId(tourId : Long) : boolean
+        }
+
+        interface JpaRepository <<interface>> {
+        }
+    }
+
+    ' ---- Entity ----
+    package "Model (Entity) Layer" {
+        class Tour {
+            -id                    : Long
+            -code                  : String
+            -name                  : String
+            -description           : String
+            -destination           : String
+            -startDate             : LocalDate
+            -endDate               : LocalDate
+            -durationDays          : Integer
+            -maxGuests             : Integer
+            -currentGuests         : Integer
+            -price                 : BigDecimal
+            -status                : TourStatus
+            -requiredLanguages     : String
+            -requiredSpecialization: String
+            -minGuides             : Integer
+            -departureRegion       : String
+            -itineraries           : List<TourItinerary>
+        }
+
+        class TourItinerary {
+            -id            : Long
+            -tour          : Tour
+            -dayNumber     : Integer
+            -sequenceOrder : Integer
+            -title         : String
+            -description   : String
+            -location      : String
+            -startTime     : LocalTime
+            -endTime       : LocalTime
+            -activityType  : String
+            -note          : String
+            -isOptional    : Boolean
+        }
+    }
+
+    ' ---- Enum ----
+    package "Enums" {
+        enum TourStatus {
+            PLANNING
+            OPEN
+            FULL
+            ONGOING
+            COMPLETED
+            CANCELLED
+        }
+    }
+
+    ' ---- DTO ----
+    package "DTO Layer" {
+        package "Request DTOs" {
+            class TourRequestDTO {
+                -code                  : String  <<@NotBlank>>
+                -name                  : String  <<@NotBlank>>
+                -description           : String
+                -destination           : String  <<@NotBlank>>
+                -startDate             : LocalDate <<@NotNull>>
+                -endDate               : LocalDate <<@NotNull>>
+                -maxGuests             : Integer <<@Min(1)>>
+                -price                 : BigDecimal <<@DecimalMin("0")>>
+                -status                : TourStatus
+                -minGuides             : Integer <<@Min(1)>>
+                -requiredLanguages     : String
+                -requiredSpecialization: String
+                -departureRegion       : String
+            }
+
+            class TourItineraryRequestDTO {
+                -dayNumber     : Integer <<@NotNull @Min(1)>>
+                -sequenceOrder : Integer <<@NotNull @Min(1)>>
+                -title         : String  <<@NotBlank>>
+                -description   : String
+                -location      : String
+                -startTime     : LocalTime
+                -endTime       : LocalTime
+                -activityType  : String
+                -note          : String
+                -isOptional    : Boolean
+            }
+        }
+
+        package "Response DTOs" {
+            class TourSummaryDTO {
+                -id                : Long
+                -code              : String
+                -name              : String
+                -destination       : String
+                -startDate         : LocalDate
+                -endDate           : LocalDate
+                -durationDays      : Integer
+                -maxGuests         : Integer
+                -currentGuests     : Integer
+                -price             : BigDecimal
+                -status            : TourStatus
+                -minGuides         : Integer
+                -assignedGuideCount: long
+            }
+
+            class TourDetailDTO {
+                -id                    : Long
+                -code                  : String
+                -name                  : String
+                -description           : String
+                -destination           : String
+                -startDate             : LocalDate
+                -endDate               : LocalDate
+                -durationDays          : Integer
+                -maxGuests             : Integer
+                -currentGuests         : Integer
+                -price                 : BigDecimal
+                -status                : TourStatus
+                -requiredLanguages     : String
+                -requiredSpecialization: String
+                -minGuides             : Integer
+                -departureRegion       : String
+                -itineraries           : List<TourItineraryDTO>
+            }
+
+            class TourItineraryDTO {
+                -id            : Long
+                -tourId        : Long
+                -dayNumber     : Integer
+                -sequenceOrder : Integer
+                -title         : String
+                -description   : String
+                -location      : String
+                -startTime     : LocalTime
+                -endTime       : LocalTime
+                -activityType  : String
+                -note          : String
+                -isOptional    : Boolean
+            }
+
+            class "ApiResponse<T>" as ApiResponse {
+                -success   : boolean
+                -message   : String
+                -data      : T
+                -timestamp : LocalDateTime
+                +{static} ok(message, data)  : ApiResponse<T>
+                +{static} error(message)     : ApiResponse<T>
+            }
+        }
+    }
+
+    ' ---- Exception ----
+    package "Exception Layer" {
+        class BusinessException {
+            -status : HttpStatus
+            +getStatus() : HttpStatus
+        }
+        class ResourceNotFoundException {
+            +ResourceNotFoundException(resourceName, id)
+        }
+        class GlobalExceptionHandler {
+            +handleBusinessException(ex)  : ResponseEntity
+            +handleNotFound(ex)           : ResponseEntity
+            +handleValidation(ex)         : ResponseEntity
+            +handleGeneral(ex)            : ResponseEntity
+        }
+    }
+}
+
+' ======================================
+' RELATIONSHIPS – MODEL (Entity)
+' ======================================
+Tour         "1" *-- "0..*" TourItinerary : has >
+Tour          ..>  TourStatus : uses
+
+' ======================================
+' RELATIONSHIPS – CONTROLLER → SERVICE
+' ======================================
+TourController          ..>  TourService          : uses
+TourItineraryController ..>  TourItineraryService : uses
+
+' ======================================
+' RELATIONSHIPS – SERVICE IMPL → INTERFACE
+' ======================================
+TourServiceImpl          ..|>  TourService
+TourItineraryServiceImpl ..|>  TourItineraryService
+
+' ======================================
+' RELATIONSHIPS – SERVICE IMPL → REPOSITORY
+' ======================================
+TourServiceImpl          ..>  TourRepository
+TourServiceImpl          ..>  TourItineraryRepository
+TourItineraryServiceImpl ..>  TourItineraryRepository
+TourItineraryServiceImpl ..>  TourRepository
+
+' ======================================
+' RELATIONSHIPS – REPOSITORY → JPA
+' ======================================
+TourRepository          --|>  JpaRepository
+TourItineraryRepository --|>  JpaRepository
+
+' ======================================
+' RELATIONSHIPS – CONTROLLER → DTO
+' ======================================
+TourController          ..>  TourRequestDTO          : receives
+TourController          ..>  TourSummaryDTO          : returns
+TourController          ..>  TourDetailDTO           : returns
+TourController          ..>  ApiResponse             : wraps
+TourDetailDTO           *--  TourItineraryDTO        : contains
+TourItineraryController ..>  TourItineraryRequestDTO : receives
+TourItineraryController ..>  TourItineraryDTO        : returns
+TourItineraryController ..>  ApiResponse             : wraps
+
+' ======================================
+' RELATIONSHIPS – EXCEPTION
+' ======================================
+ResourceNotFoundException --|>  BusinessException
+GlobalExceptionHandler    ..>  BusinessException        : handles
+GlobalExceptionHandler    ..>  ResourceNotFoundException : handles
+GlobalExceptionHandler    ..>  ApiResponse              : returns
+
+' ======================================
+' RELATIONSHIPS – CLIENT → SERVER (HTTP)
+' ======================================
+tourApi      ..>  TourController          : HTTP /api/tours
+itineraryApi ..>  TourItineraryController : HTTP /api/tours/{id}/itineraries
+
+' ======================================
+' RELATIONSHIPS – CLIENT COMPONENTS
+' ======================================
+TourListPage   ..>  TourList      : renders
+TourListPage   ..>  tourApi       : calls
+TourList       ..>  TourCard      : renders
+TourList       ..>  TourForm      : uses
+TourList       ..>  tourApi       : calls
+TourCard       ..>  TourList      : onEdit / onCancel callbacks
+TourDetailPage ..>  TourForm      : uses
+TourDetailPage ..>  ItineraryList : renders
+TourDetailPage ..>  tourApi       : calls
+ItineraryList  ..>  ItineraryForm : uses
+ItineraryList  ..>  itineraryApi  : calls
+ItineraryForm  ..>  itineraryApi  : calls
+
+' ======================================
+' NOTES
+' ======================================
+note right of Tour
+  **@Entity** – bảng: **tours**
+  @Table(name = "tours")
+  Quan hệ:
+  1 Tour ──< n TourItinerary
+end note
+
+note right of TourItinerary
+  **@Entity** – bảng: **tour_itineraries**
+  @ManyToOne → Tour (tour_id FK)
+  Sắp xếp: dayNumber ↑, sequenceOrder ↑
+  Ràng buộc:
+  • dayNumber ∈ [1 .. tour.durationDays]
+  • startTime < endTime
+  • status tour ≠ COMPLETED / CANCELLED
+end note
+
+note right of TourServiceImpl
+  **createTour():**
+  1. code.toUpperCase() → kiểm tra unique
+  2. endDate >= startDate
+  3. durationDays = DAYS(start, end) + 1
+  4. save() → TourSummaryDTO
+
+  **updateTour():**
+  1. Tour tồn tại
+  2. status ≠ COMPLETED
+  3. code unique (nếu đổi)
+  4. endDate >= startDate
+  5. tính lại durationDays → save()
+
+  **cancelTour():**
+  1. Tour tồn tại
+  2. status ≠ CANCELLED & ≠ COMPLETED
+  3. setStatus(CANCELLED) → save()
+end note
+
+note right of TourItineraryServiceImpl
+  **create() / update():**
+  1. Tour tồn tại & editable
+  2. dayNumber ≤ durationDays
+  3. startTime < endTime
+  4. save() → TourItineraryDTO
+
+  **delete():**
+  1. Tour tồn tại & editable
+  2. Itinerary tồn tại
+  3. Itinerary.tour.id == tourId
+  4. delete()
+end note
+
+note bottom of TourRequestDTO
+  Bean Validation:
+  @NotBlank: code, name, destination
+  @NotNull: startDate, endDate, maxGuests, price
+  @Min(1): maxGuests, minGuides
+  @DecimalMin("0"): price
+end note
+
+note bottom of TourItineraryRequestDTO
+  Bean Validation:
+  @NotNull @Min(1): dayNumber, sequenceOrder
+  @NotBlank: title
+  Nghiệp vụ: startTime < endTime
+end note
+
+@enduml

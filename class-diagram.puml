@@ -64,22 +64,65 @@ package "Client – ReactJS" #E0F2FE {
             -id : String
             -tour : Object
             -showAssignForm : boolean
+            -showTourForm   : boolean
+            -success : String
             +fetchTour() : void
+            +handleCancelTour() : void
             +render() : JSX
         }
     }
 
     package "components/tour" {
         class TourCard {
-            -tour : TourSummaryDTO
+            -tour    : TourSummaryDTO
+            -onEdit  : Function
+            -onCancel: Function
             +render() : JSX
         }
         class TourList {
-            -tours : TourSummaryDTO[]
+            -tours           : TourSummaryDTO[]
+            -loading         : boolean
+            -search          : String
+            -statusFilter    : String
+            -assignmentFilter: String
+            -showForm        : boolean
+            -editingTour     : Object
+            +fetchTours()    : void
+            +handleEdit(tour): void
+            +handleCancel(id, name): void
+            +handleFormSuccess(): void
+            +render() : JSX
+        }
+        class TourForm {
+            -tour    : Object
+            -form    : Object
             -loading : boolean
-            -search  : String
-            -activeOnly : boolean
-            +fetchTours() : void
+            -error   : String
+            +handleSubmit() : void
+            +render() : JSX
+        }
+    }
+
+    package "components/itinerary" {
+        class ItineraryList {
+            -tourId      : Long
+            -durationDays: Integer
+            -tourStatus  : String
+            -itineraries : TourItineraryDTO[]
+            -showForm    : boolean
+            -editingItem : Object
+            +fetchItineraries(): void
+            +handleDelete(item): void
+            +render() : JSX
+        }
+        class ItineraryForm {
+            -tourId      : Long
+            -durationDays: Integer
+            -itinerary   : Object
+            -form        : Object
+            -loading     : boolean
+            -error       : String
+            +handleSubmit() : void
             +render() : JSX
         }
     }
@@ -89,10 +132,12 @@ package "Client – ReactJS" #E0F2FE {
             -guide     : TourGuideDTO
             -selectable: boolean
             -selected  : boolean
+            -warning   : String
             +render() : JSX
         }
         class GuideFilter {
-            -filters : Object
+            -filters    : Object
+            -hideStatus : boolean
             +onChange() : void
             +render() : JSX
         }
@@ -105,6 +150,8 @@ package "Client – ReactJS" #E0F2FE {
             -selectedGuides    : Object[]
             -filters           : Object
             -saving            : boolean
+            -eligibleGuides    : TourGuideDTO[]
+            -ineligibleGuides  : TourGuideDTO[]
             +handleSelectGuide(guide) : void
             +handleSubmit()    : void
             +render() : JSX
@@ -120,10 +167,20 @@ package "Client – ReactJS" #E0F2FE {
         class tourApi {
             +getAll(activeOnly) : Promise
             +getById(id) : Promise
+            +create(data) : Promise
+            +update(id, data) : Promise
+            +cancel(id) : Promise
+        }
+        class itineraryApi {
+            +getByTour(tourId) : Promise
+            +create(tourId, data) : Promise
+            +update(tourId, itemId, data) : Promise
+            +delete(tourId, itemId) : Promise
         }
         class guideApi {
             +getAll(filters) : Promise
             +getById(id) : Promise
+            +getForTour(tourId, filters) : Promise
         }
         class assignmentApi {
             +getByTour(tourId) : Promise
@@ -142,13 +199,24 @@ package "Server – Spring Boot" #E8F5E9 {
     package "Controller Layer" {
         class TourController {
             -tourService : TourService
-            +getAllTours(activeOnly : boolean) : ResponseEntity
+            +getAllTours(activeOnly, keyword, status) : ResponseEntity
             +getTourById(id : Long) : ResponseEntity
+            +createTour(request : TourRequestDTO) : ResponseEntity
+            +updateTour(id : Long, request : TourRequestDTO) : ResponseEntity
+            +cancelTour(id : Long) : ResponseEntity
+        }
+        class TourItineraryController {
+            -itineraryService : TourItineraryService
+            +getItineraries(tourId : Long) : ResponseEntity
+            +createItinerary(tourId : Long, request : TourItineraryRequestDTO) : ResponseEntity
+            +updateItinerary(tourId : Long, itemId : Long, request : TourItineraryRequestDTO) : ResponseEntity
+            +deleteItinerary(tourId : Long, itemId : Long) : ResponseEntity
         }
         class TourGuideController {
             -guideService : TourGuideService
             +getGuides(status, specialization, language, region) : ResponseEntity
             +getGuideById(id : Long) : ResponseEntity
+            +getGuidesForTour(tourId, specialization, language, region) : ResponseEntity
         }
         class TourAssignmentController {
             -assignmentService : TourAssignmentService
@@ -163,12 +231,23 @@ package "Server – Spring Boot" #E8F5E9 {
         interface TourService <<interface>> {
             +getAllTours() : List<TourSummaryDTO>
             +getActiveTours() : List<TourSummaryDTO>
+            +searchTours(keyword, status) : List<TourSummaryDTO>
             +getTourById(id : Long) : TourDetailDTO
+            +createTour(request : TourRequestDTO) : TourSummaryDTO
+            +updateTour(id : Long, request : TourRequestDTO) : TourSummaryDTO
+            +cancelTour(id : Long) : void
+        }
+        interface TourItineraryService <<interface>> {
+            +getByTourId(tourId : Long) : List<TourItineraryDTO>
+            +create(tourId : Long, request : TourItineraryRequestDTO) : TourItineraryDTO
+            +update(tourId, itemId, request) : TourItineraryDTO
+            +delete(tourId : Long, itemId : Long) : void
         }
         interface TourGuideService <<interface>> {
             +getAllGuides() : List<TourGuideDTO>
             +getGuideById(id : Long) : TourGuideDTO
             +filterGuides(status, spec, lang, region) : List<TourGuideDTO>
+            +getGuidesForTour(tourId, spec, lang, region) : List<TourGuideDTO>
         }
         interface TourAssignmentService <<interface>> {
             +getAssignmentsByTourId(tourId : Long) : List<AssignmentDTO>
@@ -182,18 +261,38 @@ package "Server – Spring Boot" #E8F5E9 {
         class TourServiceImpl {
             -tourRepository : TourRepository
             -assignmentRepository : TourAssignmentRepository
+            -itineraryRepository : TourItineraryRepository
             +getAllTours() : List<TourSummaryDTO>
             +getActiveTours() : List<TourSummaryDTO>
+            +searchTours(keyword, status) : List<TourSummaryDTO>
             +getTourById(id : Long) : TourDetailDTO
+            +createTour(request : TourRequestDTO) : TourSummaryDTO
+            +updateTour(id : Long, request : TourRequestDTO) : TourSummaryDTO
+            +cancelTour(id : Long) : void
             -toSummaryDTO(tour : Tour) : TourSummaryDTO
-            -toDetailDTO(tour : Tour) : TourDetailDTO
+            -toDetailDTO(tour, itineraries) : TourDetailDTO
+            -toItineraryDTO(it : TourItinerary) : TourItineraryDTO
             -toAssignmentDTO(a : TourAssignment) : AssignmentDTO
+        }
+        class TourItineraryServiceImpl {
+            -itineraryRepository : TourItineraryRepository
+            -tourRepository : TourRepository
+            +getByTourId(tourId : Long) : List<TourItineraryDTO>
+            +create(tourId, request) : TourItineraryDTO
+            +update(tourId, itemId, request) : TourItineraryDTO
+            +delete(tourId : Long, itemId : Long) : void
+            -validateTourEditable(tour : Tour) : void
+            -validateDayNumber(dayNumber, durationDays) : void
+            -validateTime(request) : void
+            -toDTO(it : TourItinerary) : TourItineraryDTO
         }
         class TourGuideServiceImpl {
             -guideRepository : TourGuideRepository
+            -tourRepository  : TourRepository
             +getAllGuides() : List<TourGuideDTO>
             +getGuideById(id : Long) : TourGuideDTO
             +filterGuides(status, spec, lang, region) : List<TourGuideDTO>
+            +getGuidesForTour(tourId, spec, lang, region) : List<TourGuideDTO>
             -toDTO(guide : TourGuide) : TourGuideDTO
         }
         class TourAssignmentServiceImpl {
@@ -212,15 +311,23 @@ package "Server – Spring Boot" #E8F5E9 {
     package "Repository (DAO) Layer" {
         interface TourRepository <<interface>> {
             +findByCode(code : String) : Optional<Tour>
+            +existsByCode(code : String) : boolean
+            +existsByCodeAndIdNot(code, id) : boolean
             +findByStatus(status : TourStatus) : List<Tour>
             +findByIdWithAssignments(id : Long) : Optional<Tour>
             +findActiveTours() : List<Tour>
+            +searchTours(keyword, status) : List<Tour>
+        }
+        interface TourItineraryRepository <<interface>> {
+            +findByTourIdOrderByDayNumberAscSequenceOrderAsc(tourId) : List<TourItinerary>
+            +existsByTourId(tourId : Long) : boolean
         }
         interface TourGuideRepository <<interface>> {
             +findByCode(code : String) : Optional<TourGuide>
             +findByStatus(status : GuideStatus) : List<TourGuide>
             +findByFilters(status, spec, lang, region) : List<TourGuide>
             +countScheduleOverlaps(guideId, startDate, endDate, excludeTourId) : long
+            +findGuideIdsWithScheduleOverlap(startDate, endDate, excludeTourId) : List<Long>
         }
         interface TourAssignmentRepository <<interface>> {
             +findByTourId(tourId : Long) : List<TourAssignment>
@@ -253,6 +360,22 @@ package "Server – Spring Boot" #E8F5E9 {
             -minGuides : Integer
             -departureRegion : String
             -assignments : List<TourAssignment>
+            -bookings : List<Booking>
+            -itineraries : List<TourItinerary>
+        }
+        class TourItinerary {
+            -id : Long
+            -tour : Tour
+            -dayNumber : Integer
+            -sequenceOrder : Integer
+            -title : String
+            -description : String
+            -location : String
+            -startTime : LocalTime
+            -endTime : LocalTime
+            -activityType : String
+            -note : String
+            -isOptional : Boolean
         }
         class TourGuide {
             -id : Long
@@ -314,6 +437,33 @@ package "Server – Spring Boot" #E8F5E9 {
     ' ----- DTO Layer -----
     package "DTO Layer" {
         package "Request" {
+            class TourRequestDTO {
+                -code : String
+                -name : String
+                -description : String
+                -destination : String
+                -startDate : LocalDate
+                -endDate : LocalDate
+                -maxGuests : Integer
+                -price : BigDecimal
+                -status : TourStatus
+                -minGuides : Integer
+                -requiredLanguages : String
+                -requiredSpecialization : String
+                -departureRegion : String
+            }
+            class TourItineraryRequestDTO {
+                -dayNumber : Integer
+                -sequenceOrder : Integer
+                -title : String
+                -description : String
+                -location : String
+                -startTime : LocalTime
+                -endTime : LocalTime
+                -activityType : String
+                -note : String
+                -isOptional : Boolean
+            }
             class AssignmentRequestDTO {
                 -tourId : Long
                 -guides : List<GuideAssignmentItem>
@@ -358,6 +508,21 @@ package "Server – Spring Boot" #E8F5E9 {
                 -minGuides : Integer
                 -departureRegion : String
                 -assignments : List<AssignmentDTO>
+                -itineraries : List<TourItineraryDTO>
+            }
+            class TourItineraryDTO {
+                -id : Long
+                -tourId : Long
+                -dayNumber : Integer
+                -sequenceOrder : Integer
+                -title : String
+                -description : String
+                -location : String
+                -startTime : LocalTime
+                -endTime : LocalTime
+                -activityType : String
+                -note : String
+                -isOptional : Boolean
             }
             class TourGuideDTO {
                 -id : Long
@@ -372,6 +537,8 @@ package "Server – Spring Boot" #E8F5E9 {
                 -status : GuideStatus
                 -avatarUrl : String
                 -bio : String
+                -availabilityWarning : String
+                -eligible : boolean
             }
             class AssignmentDTO {
                 -id : Long
@@ -503,11 +670,13 @@ package "Server – Spring Boot" #E8F5E9 {
 ' ============================
 ' RELATIONSHIPS – MODEL (Entity)
 ' ============================
-Tour          "1" *-- "0..*" TourAssignment : has >
-TourGuide     "1" *-- "0..*" TourAssignment : assigned to >
+Tour          "1" *-- "0..*" TourAssignment  : has >
+Tour          "1" *-- "0..*" TourItinerary   : has >
+TourGuide     "1" *-- "0..*" TourAssignment  : assigned to >
 Tour           ..>  TourStatus        : uses
 TourGuide      ..>  GuideStatus       : uses
 TourAssignment ..>  AssignmentStatus  : uses
+TourItinerary  ..>  Tour              : belongs to
 
 Tour      "1" *-- "0..*" Booking  : has >
 Customer  "1" *-- "0..*" Booking  : makes >
@@ -519,6 +688,7 @@ AssignmentRequestDTO *-- GuideAssignmentItem : contains
 ' RELATIONSHIPS – CONTROLLER → SERVICE
 ' ============================
 TourController           ..>  TourService           : uses
+TourItineraryController  ..>  TourItineraryService  : uses
 TourGuideController      ..>  TourGuideService      : uses
 TourAssignmentController ..>  TourAssignmentService : uses
 
@@ -526,6 +696,7 @@ TourAssignmentController ..>  TourAssignmentService : uses
 ' RELATIONSHIPS – SERVICE IMPL → INTERFACE
 ' ============================
 TourServiceImpl            ..|>  TourService
+TourItineraryServiceImpl   ..|>  TourItineraryService
 TourGuideServiceImpl       ..|>  TourGuideService
 TourAssignmentServiceImpl  ..|>  TourAssignmentService
 
@@ -534,6 +705,9 @@ TourAssignmentServiceImpl  ..|>  TourAssignmentService
 ' ============================
 TourServiceImpl            ..>  TourRepository
 TourServiceImpl            ..>  TourAssignmentRepository
+TourServiceImpl            ..>  TourItineraryRepository
+TourItineraryServiceImpl   ..>  TourItineraryRepository
+TourItineraryServiceImpl   ..>  TourRepository
 TourGuideServiceImpl       ..>  TourGuideRepository
 TourAssignmentServiceImpl  ..>  TourAssignmentRepository
 TourAssignmentServiceImpl  ..>  TourRepository
@@ -543,11 +717,12 @@ TourAssignmentServiceImpl  ..>  TourGuideRepository
 ' RELATIONSHIPS – REPOSITORY → JPA
 ' ============================
 TourRepository            --|>  JpaRepository
+TourItineraryRepository   --|>  JpaRepository
 TourGuideRepository       --|>  JpaRepository
 TourAssignmentRepository  --|>  JpaRepository
 
 ' ============================
-' RELATIONSHIPS – DTO
+' RELATIONSHIPS – REPORT
 ' ============================
 ReportController         ..>  ReportService    : uses
 ReportServiceImpl        ..|>  ReportService
@@ -560,15 +735,23 @@ ReportController         ..>  RevenueReportDTO : returns
 RevenueReportDTO         *--  RevenueSummaryDTO : contains
 RevenueReportDTO         *--  TourRevenueDTO   : contains
 
-TourController           ..>  TourSummaryDTO   : returns
-TourController           ..>  TourDetailDTO    : returns
-TourDetailDTO            *--  AssignmentDTO    : contains
-TourGuideController      ..>  TourGuideDTO     : returns
+' ============================
+' RELATIONSHIPS – CONTROLLER → DTO
+' ============================
+TourController           ..>  TourRequestDTO    : receives
+TourController           ..>  TourSummaryDTO    : returns
+TourController           ..>  TourDetailDTO     : returns
+TourDetailDTO            *--  AssignmentDTO     : contains
+TourDetailDTO            *--  TourItineraryDTO  : contains
+TourItineraryController  ..>  TourItineraryRequestDTO : receives
+TourItineraryController  ..>  TourItineraryDTO  : returns
+TourGuideController      ..>  TourGuideDTO      : returns
 TourAssignmentController ..>  AssignmentRequestDTO : receives
-TourAssignmentController ..>  AssignmentDTO    : returns
-TourController           ..>  ApiResponse      : wraps
-TourGuideController      ..>  ApiResponse      : wraps
-TourAssignmentController ..>  ApiResponse      : wraps
+TourAssignmentController ..>  AssignmentDTO     : returns
+TourController           ..>  ApiResponse       : wraps
+TourItineraryController  ..>  ApiResponse       : wraps
+TourGuideController      ..>  ApiResponse       : wraps
+TourAssignmentController ..>  ApiResponse       : wraps
 
 ' ============================
 ' RELATIONSHIPS – EXCEPTION
@@ -581,16 +764,27 @@ GlobalExceptionHandler     ..>  ApiResponse               : returns
 ' ============================
 ' RELATIONSHIPS – CLIENT → SERVER (HTTP)
 ' ============================
-tourApi       ..>  TourController           : HTTP GET /api/tours
+tourApi       ..>  TourController           : HTTP /api/tours
+itineraryApi  ..>  TourItineraryController  : HTTP /api/tours/{id}/itineraries
 guideApi      ..>  TourGuideController      : HTTP GET /api/guides
 assignmentApi ..>  TourAssignmentController : HTTP POST/DELETE /api/assignments
 
+' ============================
+' RELATIONSHIPS – CLIENT COMPONENTS
+' ============================
 TourListPage   ..>  TourList       : uses
 TourDetailPage ..>  AssignmentForm : uses
 TourDetailPage ..>  AssignmentList : uses
+TourDetailPage ..>  TourForm       : uses
+TourDetailPage ..>  ItineraryList  : uses
 TourDetailPage ..>  tourApi        : calls
 TourList       ..>  TourCard       : renders
+TourList       ..>  TourForm       : uses
 TourList       ..>  tourApi        : calls
+TourCard       ..>  TourList       : onEdit / onCancel callbacks
+ItineraryList  ..>  ItineraryForm  : uses
+ItineraryList  ..>  itineraryApi   : calls
+ItineraryForm  ..>  itineraryApi   : calls
 AssignmentForm ..>  GuideCard      : renders
 AssignmentForm ..>  GuideFilter    : renders
 AssignmentForm ..>  guideApi       : calls
@@ -600,6 +794,15 @@ AssignmentList ..>  assignmentApi  : calls
 ' ============================
 ' NOTES
 ' ============================
+note top of TourItinerary
+  **Lịch trình theo ngày**
+  Sắp xếp: dayNumber ASC,
+  sequenceOrder ASC
+  Ràng buộc: dayNumber ∈ [1, durationDays]
+  startTime < endTime
+  Không sửa nếu tour COMPLETED/CANCELLED
+end note
+
 note top of TourAssignment
   **Bảng trung gian**
   UNIQUE(tour_id, guide_id)
@@ -607,8 +810,42 @@ note top of TourAssignment
   trùng tour_id + guide_id
 end note
 
+note right of TourServiceImpl
+  **createTour():**
+  1. Validate code unique
+  2. Validate endDate >= startDate
+  3. Tính durationDays tự động
+  4. Save → TourSummaryDTO
+
+  **updateTour():**
+  1. Tour phải tồn tại
+  2. status != COMPLETED
+  3. Validate code (nếu đổi)
+  4. Validate dates
+  5. Update & Save
+
+  **cancelTour():**
+  1. Tour phải tồn tại
+  2. status != CANCELLED & != COMPLETED
+  3. setStatus(CANCELLED) & Save
+end note
+
+note right of TourItineraryServiceImpl
+  **create() / update():**
+  1. Tour tồn tại
+  2. status != COMPLETED/CANCELLED
+  3. dayNumber ≤ durationDays
+  4. startTime < endTime
+  5. Save → TourItineraryDTO
+
+  **delete():**
+  1. Tour tồn tại & editable
+  2. Itinerary tồn tại & thuộc tour
+  3. delete()
+end note
+
 note right of TourAssignmentServiceImpl
-  **Luồng saveAssignments():**
+  **saveAssignments():**
   1. Tìm Tour → validate status
   2. Với mỗi guide:
      a. Tìm TourGuide → 404 nếu không có

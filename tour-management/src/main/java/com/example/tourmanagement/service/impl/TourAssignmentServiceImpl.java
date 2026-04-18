@@ -59,11 +59,17 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
         Tour tour = tourRepository.findById(request.getTourId())
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", request.getTourId()));
 
-        // Bước 2: Kiểm tra trạng thái tour
-        if (tour.getStatus() == TourStatus.COMPLETED || tour.getStatus() == TourStatus.CANCELLED) {
+        // Bước 2: Chỉ cho phân công khi tour đang ở trạng thái PLANNING hoặc OPEN
+        if (tour.getStatus() != TourStatus.PLANNING && tour.getStatus() != TourStatus.OPEN) {
+            String statusLabel = switch (tour.getStatus()) {
+                case FULL      -> "đã đủ khách";
+                case ONGOING   -> "đang diễn ra";
+                case COMPLETED -> "đã hoàn thành";
+                case CANCELLED -> "đã hủy";
+                default        -> "không hợp lệ để phân công";
+            };
             throw new BusinessException(
-                "Không thể phân công hướng dẫn viên cho tour đã " +
-                (tour.getStatus() == TourStatus.COMPLETED ? "hoàn thành" : "hủy")
+                "Không thể phân công hướng dẫn viên: tour đang ở trạng thái '" + statusLabel + "'"
             );
         }
 

@@ -19,4 +19,7 @@ public class TourGuideDTO {
     private GuideStatus status;
     private String avatarUrl;
     private String bio;
+    // Trường bổ sung cho chức năng phân công – chỉ được điền bởi getGuidesForTour()
+    private String availabilityWarning; // null = phù hợp; else = lý do không phù hợp
+    private boolean eligible;           // true nếu availabilityWarning == null
 }

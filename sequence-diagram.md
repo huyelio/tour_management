@@ -222,6 +222,44 @@ _[Kết thúc vòng lặp – lặp lại bước 54–70 cho mỗi HDV trong da
 
 ---
 
+### Giai đoạn 4 – Hủy phân công
+
+**84.** Người dùng đang xem `TourDetailPage`; khu vực **Hướng dẫn viên** render `AssignmentList` với prop `assignments` (lấy từ `tour.assignments`) và `onRefresh={fetchTour}`.
+
+**85.** `AssignmentList` tách danh sách thành `active` (các phân công có `status !== 'CANCELLED'`) và `cancelled` (các phân công đã hủy). Chỉ các dòng **active** hiển thị nút **"Hủy"**.
+
+**86.** Người dùng click **"Hủy"** trên một phân công → `handleCancel(a.id)` được gọi.
+
+**87.** `handleCancel` hiển thị `confirm('Bạn có chắc muốn hủy phân công này?')` – nếu người dùng bấm hủy dialog thì luồng dừng, không gọi API.
+
+**88.** Nếu xác nhận, `AssignmentList` gọi `setCancellingId(id)` để disable nút và hiển thị trạng thái chờ.
+
+**89.** `handleCancel` gọi `assignmentApi.cancel(id)` → gửi HTTP **DELETE** `/api/assignments/{id}` lên server (axios base URL đã gồm tiền tố `/api`).
+
+**90.** `TourAssignmentController` nhận request tại `@DeleteMapping("/{id}")`, gọi `assignmentService.cancelAssignment(id)`.
+
+**91.** `TourAssignmentServiceImpl.cancelAssignment(assignmentId)` gọi `assignmentRepository.findById(assignmentId)`.
+
+**92.** `TourAssignmentRepository` thực thi truy vấn lấy bản ghi `tour_assignments` theo khóa chính. Nếu không tồn tại → ném `ResourceNotFoundException` → HTTP **404**.
+
+**93.** Nếu tìm thấy, service gán `assignment.setStatus(AssignmentStatus.CANCELLED)` (hủy mềm: **không xóa** dòng, chỉ đổi trạng thái).
+
+**94.** Gọi `assignmentRepository.save(assignment)` → Database thực thi **UPDATE** `tour_assignments SET status = 'CANCELLED', ...` (các cột khác giữ nguyên theo mapping JPA).
+
+**95.** `TourAssignmentController` trả về HTTP **200** với `ApiResponse.ok("Hủy phân công thành công", null)`.
+
+**96.** `assignmentApi` nhận phản hồi thành công → `handleCancel` gọi `onRefresh()`, tức `TourDetailPage.fetchTour()`.
+
+**97.** `fetchTour()` gọi lại `tourApi.getById(id)` (**GET** `/api/tours/{id}`) để tải lại chi tiết tour kèm danh sách phân công mới nhất.
+
+**98.** `TourDetailPage` cập nhật state `tour`; `AssignmentList` render lại: phân công vừa hủy **không còn** trong nhóm active, có thể xuất hiện trong khối **"Xem … phân công đã hủy"** (nếu có).
+
+**99.** `handleCancel` vào nhánh `finally`, gọi `setCancellingId(null)` để bật lại nút **"Hủy"** cho các dòng khác.
+
+**Ghi chú:** Luồng hủy phân công hiện tại **không** gọi lại `updateTourStatusIfNeeded`: nếu tour đã được chuyển sang `OPEN` vì đủ `minGuides`, sau khi hủy bớt HDV trạng thái tour **vẫn có thể là `OPEN`** cho đến khi có logic nghiệp vụ bổ sung (rollback trạng thái).
+
+---
+
 ## Luồng thay thế – Trường hợp lỗi
 
 | Tình huống                              | Xảy ra tại bước | Kết quả                                                                    |
@@ -234,3 +272,6 @@ _[Kết thúc vòng lặp – lặp lại bước 54–70 cho mỗi HDV trong da
 | HDV đã được phân công                   | 62–65           | `BusinessException` → HTTP 400 → FE hiện "đã được phân công rồi"           |
 | Lỗi hệ thống (DB down, v.v.)            | Bất kỳ          | `Exception` → `GlobalExceptionHandler` → HTTP 500 → FE hiện "Lỗi hệ thống" |
 | Không chọn HDV nào                      | 46              | Xử lý tại FE, không gọi API → hiện "Vui lòng chọn ít nhất một HDV"         |
+| Phân công không tồn tại (ID sai)        | 91–92           | `ResourceNotFoundException` → HTTP 404 → FE `alert('Lỗi: ' + err.message)` |
+| Lỗi mạng / server khi hủy phân công     | 89–95           | `catch` trong `handleCancel` → `alert` lỗi; `finally` reset `cancellingId` |
+| Người dùng hủy dialog xác nhận          | 87              | Không gọi API, không đổi dữ liệu                                           |
