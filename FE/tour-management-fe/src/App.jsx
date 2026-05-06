@@ -1,7 +1,9 @@
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import TourListPage from "./pages/TourListPage";
 import TourDetailPage from "./pages/TourDetailPage";
 import RevenueReportPage from "./pages/RevenueReportPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
 const navLinkStyle = ({ isActive }) => ({
   color: isActive ? "#fff" : "rgba(255,255,255,0.7)",
@@ -14,9 +16,18 @@ const navLinkStyle = ({ isActive }) => ({
   transition: "all 0.2s",
 });
 
-const App = () => (
-  <BrowserRouter>
-    {/* Navigation Header */}
+const HeaderNav = () => {
+  const navigate = useNavigate();
+  const currentUser = (() => {
+    try { return JSON.parse(sessionStorage.getItem("currentUser")); } catch { return null; }
+  })();
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("currentUser");
+    navigate("/login");
+  };
+
+  return (
     <header
       style={{
         background: "linear-gradient(135deg, #0f172a, #1e3a8a)",
@@ -42,7 +53,8 @@ const App = () => (
       >
         TourManager
       </div>
-      <nav style={{ display: "flex", gap: "4px" }}>
+
+      <nav style={{ display: "flex", gap: "4px", flex: 1 }}>
         <NavLink to="/" end style={navLinkStyle}>
           Danh sách Tour
         </NavLink>
@@ -50,7 +62,46 @@ const App = () => (
           Thống kê doanh thu
         </NavLink>
       </nav>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {currentUser ? (
+          <>
+            <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>
+              Xin chào, <strong>{currentUser.username}</strong>
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "5px 12px",
+                background: "rgba(255,255,255,0.15)",
+                color: "#fff",
+                border: "1px solid rgba(255,255,255,0.3)",
+                borderRadius: "6px",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              Đăng xuất
+            </button>
+          </>
+        ) : (
+          <>
+            <NavLink to="/login" style={navLinkStyle}>
+              Đăng nhập
+            </NavLink>
+            <NavLink to="/register" style={navLinkStyle}>
+              Đăng ký
+            </NavLink>
+          </>
+        )}
+      </div>
     </header>
+  );
+};
+
+const App = () => (
+  <BrowserRouter>
+    <HeaderNav />
 
     {/* Main Content */}
     <main
@@ -65,6 +116,8 @@ const App = () => (
           <Route path="/" element={<TourListPage />} />
           <Route path="/tours/:id" element={<TourDetailPage />} />
           <Route path="/reports/revenue" element={<RevenueReportPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </div>
     </main>
