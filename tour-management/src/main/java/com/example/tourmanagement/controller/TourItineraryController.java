@@ -1,8 +1,9 @@
 package com.example.tourmanagement.controller;
 
-import com.example.tourmanagement.dto.request.TourItineraryRequestDTO;
+import com.example.tourmanagement.controller.support.TourEntityLoader;
 import com.example.tourmanagement.dto.response.ApiResponse;
-import com.example.tourmanagement.dto.response.TourItineraryDTO;
+import com.example.tourmanagement.model.Tour;
+import com.example.tourmanagement.model.TourItinerary;
 import com.example.tourmanagement.service.TourItineraryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,45 +19,49 @@ import java.util.List;
 public class TourItineraryController {
 
     private final TourItineraryService itineraryService;
+    private final TourEntityLoader tourLoader;
 
-    // GET /api/tours/{tourId}/itineraries
     @GetMapping
-    public ResponseEntity<ApiResponse<List<TourItineraryDTO>>> getItineraries(
+    public ResponseEntity<ApiResponse<List<TourItinerary>>> getItineraries(
             @PathVariable Long tourId
     ) {
-        List<TourItineraryDTO> itineraries = itineraryService.getByTourId(tourId);
+        Tour tour = tourLoader.requireById(tourId);
+        List<TourItinerary> itineraries = itineraryService.getByTourId(tour);
         return ResponseEntity.ok(ApiResponse.ok("Lấy lịch trình tour thành công", itineraries));
     }
 
-    // POST /api/tours/{tourId}/itineraries
     @PostMapping
-    public ResponseEntity<ApiResponse<TourItineraryDTO>> createItinerary(
+    public ResponseEntity<ApiResponse<TourItinerary>> createItinerary(
             @PathVariable Long tourId,
-            @Valid @RequestBody TourItineraryRequestDTO request
+            @Valid @RequestBody TourItinerary itinerary
     ) {
-        TourItineraryDTO created = itineraryService.create(tourId, request);
+        Tour tour = tourLoader.requireById(tourId);
+        itinerary.setId(null);
+        TourItinerary created = itineraryService.create(tour, itinerary);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Thêm lịch trình thành công", created));
     }
 
-    // PUT /api/tours/{tourId}/itineraries/{itineraryId}
     @PutMapping("/{itineraryId}")
-    public ResponseEntity<ApiResponse<TourItineraryDTO>> updateItinerary(
+    public ResponseEntity<ApiResponse<TourItinerary>> updateItinerary(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId,
-            @Valid @RequestBody TourItineraryRequestDTO request
+            @Valid @RequestBody TourItinerary itinerary
     ) {
-        TourItineraryDTO updated = itineraryService.update(tourId, itineraryId, request);
+        Tour tour = tourLoader.requireById(tourId);
+        itinerary.setId(itineraryId);
+        TourItinerary updated = itineraryService.update(tour, itinerary);
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật lịch trình thành công", updated));
     }
 
-    // DELETE /api/tours/{tourId}/itineraries/{itineraryId}
     @DeleteMapping("/{itineraryId}")
     public ResponseEntity<ApiResponse<Void>> deleteItinerary(
             @PathVariable Long tourId,
             @PathVariable Long itineraryId
     ) {
-        itineraryService.delete(tourId, itineraryId);
+        Tour tour = tourLoader.requireById(tourId);
+        TourItinerary itinerary = TourItinerary.builder().id(itineraryId).build();
+        itineraryService.delete(tour, itinerary);
         return ResponseEntity.ok(ApiResponse.ok("Xóa lịch trình thành công", null));
     }
 }

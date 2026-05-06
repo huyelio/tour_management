@@ -19,7 +19,7 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
   // ID các guide đã được phân công (status != CANCELLED)
   const assignedGuideIds = (existingAssignments || [])
     .filter((a) => a.status !== "CANCELLED")
-    .map((a) => a.guideId);
+    .map((a) => a.guide?.id ?? a.guideId);
 
   useEffect(() => {
     fetchGuides();
@@ -81,15 +81,13 @@ const AssignmentForm = ({ tour, existingAssignments, onSuccess, onClose }) => {
     setSuccessMsg(null);
 
     try {
-      const request = {
-        tourId: tour.id,
-        guides: selectedGuides.map(({ guideId, role, note }) => ({
-          guideId,
-          role,
-          note,
-        })),
-      };
-      const res = await assignmentApi.save(request);
+      const body = selectedGuides.map(({ guideId, role, note }) => ({
+        tour: { id: tour.id },
+        guide: { id: guideId },
+        role,
+        note: note || null,
+      }));
+      const res = await assignmentApi.save(body);
       setSuccessMsg(res.message || "Phân công thành công!");
       setSelectedGuides([]);
       if (onSuccess) onSuccess();

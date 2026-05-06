@@ -81,7 +81,7 @@ const TourForm = ({ tour, onSuccess, onClose }) => {
         description: form.description || null,
       }
       if (isEdit) {
-        await tourApi.update(tour.id, payload)
+        await tourApi.update(tour.id, { ...payload, id: tour.id })
       } else {
         await tourApi.create(payload)
       }

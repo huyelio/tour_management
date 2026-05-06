@@ -19,13 +19,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      * Tổng hợp doanh thu và số khách theo tour.
      * Chỉ tính các booking có status trong danh sách truyền vào (CONFIRMED, COMPLETED).
      */
-    @Query("""
-            SELECT b.tour.id   AS tourId,
-                   SUM(b.numberOfGuests) AS totalGuests,
-                   SUM(b.totalAmount)    AS totalRevenue
-            FROM Booking b
-            WHERE b.status IN :statuses
-            GROUP BY b.tour.id
-            """)
+    @Query("SELECT b.tour.id AS tourId, SUM(b.numberOfGuests) AS totalGuests, SUM(b.totalAmount) AS totalRevenue "
+            + "FROM Booking b WHERE b.status IN :statuses GROUP BY b.tour.id")
     List<TourRevenueProjection> aggregateRevenueByTour(@Param("statuses") Collection<BookingStatus> statuses);
 }

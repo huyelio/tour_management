@@ -1,18 +1,11 @@
 package com.example.tourmanagement.service.impl;
 
-import com.example.tourmanagement.dto.request.TourRequestDTO;
-import com.example.tourmanagement.dto.response.AssignmentDTO;
-import com.example.tourmanagement.dto.response.TourDetailDTO;
-import com.example.tourmanagement.dto.response.TourItineraryDTO;
-import com.example.tourmanagement.dto.response.TourSummaryDTO;
 import com.example.tourmanagement.exception.BusinessException;
 import com.example.tourmanagement.exception.ResourceNotFoundException;
 import com.example.tourmanagement.model.Tour;
 import com.example.tourmanagement.model.TourAssignment;
-import com.example.tourmanagement.model.TourItinerary;
 import com.example.tourmanagement.model.enums.TourStatus;
 import com.example.tourmanagement.repository.TourAssignmentRepository;
-import com.example.tourmanagement.repository.TourItineraryRepository;
 import com.example.tourmanagement.repository.TourRepository;
 import com.example.tourmanagement.service.TourService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,118 +24,109 @@ public class TourServiceImpl implements TourService {
 
     private final TourRepository tourRepository;
     private final TourAssignmentRepository assignmentRepository;
-    private final TourItineraryRepository itineraryRepository;
 
     @Override
-    public List<TourSummaryDTO> getAllTours() {
+    public List<Tour> getAllTours() {
         return tourRepository.findAll().stream()
-                .map(this::toSummaryDTO)
+                .map(this::withAssignedGuideCount)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<TourSummaryDTO> getActiveTours() {
+    public List<Tour> getActiveTours() {
         return tourRepository.findActiveTours().stream()
-                .map(this::toSummaryDTO)
+                .map(this::withAssignedGuideCount)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<TourSummaryDTO> searchTours(String keyword, TourStatus status) {
+    public List<Tour> searchTours(String keyword, TourStatus status) {
         return tourRepository.searchTours(keyword, status).stream()
-                .map(this::toSummaryDTO)
+                .map(this::withAssignedGuideCount)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public TourDetailDTO getTourById(Long id) {
+    public Tour getTourById(Long id) {
         Tour tour = tourRepository.findByIdWithAssignments(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", id));
-        List<TourItineraryDTO> itineraries = itineraryRepository
-                .findByTourIdSorted(id)
-                .stream()
-                .map(this::toItineraryDTO)
-                .collect(Collectors.toList());
-        return toDetailDTO(tour, itineraries);
+        tour.getAssignments().sort(Comparator.comparing(
+                TourAssignment::getId,
+                Comparator.nullsFirst(Long::compareTo)));
+        return withAssignedGuideCount(tour);
     }
 
     @Override
     @Transactional
-    public TourSummaryDTO createTour(TourRequestDTO request) {
-        String code = request.getCode().trim().toUpperCase();
+    public Tour createTour(Tour tour) {
+        String code = tour.getCode().trim().toUpperCase();
+        tour.setCode(code);
+        tour.setName(tour.getName().trim());
+        tour.setDestination(tour.getDestination().trim());
         if (tourRepository.existsByCode(code)) {
             throw new BusinessException("Mã tour '" + code + "' đã tồn tại");
         }
-        if (request.getEndDate().isBefore(request.getStartDate())) {
+        if (tour.getEndDate().isBefore(tour.getStartDate())) {
             throw new BusinessException("Ngày kết thúc phải >= ngày bắt đầu");
         }
-        int durationDays = (int) ChronoUnit.DAYS.between(request.getStartDate(), request.getEndDate()) + 1;
+        int durationDays = (int) ChronoUnit.DAYS.between(tour.getStartDate(), tour.getEndDate()) + 1;
+        tour.setDurationDays(durationDays);
+        if (tour.getStatus() == null) {
+            tour.setStatus(TourStatus.PLANNING);
+        }
+        if (tour.getMinGuides() == null) {
+            tour.setMinGuides(1);
+        }
 
-        Tour tour = Tour.builder()
-                .code(code)
-                .name(request.getName().trim())
-                .description(request.getDescription())
-                .destination(request.getDestination().trim())
-                .startDate(request.getStartDate())
-                .endDate(request.getEndDate())
-                .durationDays(durationDays)
-                .maxGuests(request.getMaxGuests())
-                .currentGuests(0)
-                .price(request.getPrice())
-                .status(request.getStatus() != null ? request.getStatus() : TourStatus.PLANNING)
-                .minGuides(request.getMinGuides() != null ? request.getMinGuides() : 1)
-                .requiredLanguages(request.getRequiredLanguages())
-                .requiredSpecialization(request.getRequiredSpecialization())
-                .departureRegion(request.getDepartureRegion())
-                .build();
-
-        return toSummaryDTO(tourRepository.save(tour));
+        return withAssignedGuideCount(tourRepository.save(tour));
     }
 
     @Override
     @Transactional
-    public TourSummaryDTO updateTour(Long id, TourRequestDTO request) {
-        Tour tour = tourRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", id));
+    public Tour updateTour(Tour tour) {
+        if (tour.getId() == null) {
+            throw new BusinessException("Tour cần có ID để cập nhật");
+        }
 
-        if (tour.getStatus() == TourStatus.COMPLETED) {
+        Tour existing = tourRepository.findById(tour.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", tour.getId()));
+
+        if (existing.getStatus() == TourStatus.COMPLETED) {
             throw new BusinessException("Không thể chỉnh sửa tour đã hoàn thành");
         }
 
-        String code = request.getCode().trim().toUpperCase();
-        if (!tour.getCode().equalsIgnoreCase(code) && tourRepository.existsByCodeAndIdNot(code, id)) {
+        String code = tour.getCode().trim().toUpperCase();
+        if (!existing.getCode().equalsIgnoreCase(code) && tourRepository.existsByCodeAndIdNot(code, tour.getId())) {
             throw new BusinessException("Mã tour '" + code + "' đã tồn tại");
         }
-        if (request.getEndDate().isBefore(request.getStartDate())) {
+        if (tour.getEndDate().isBefore(tour.getStartDate())) {
             throw new BusinessException("Ngày kết thúc phải >= ngày bắt đầu");
         }
-        int durationDays = (int) ChronoUnit.DAYS.between(request.getStartDate(), request.getEndDate()) + 1;
+        int durationDays = (int) ChronoUnit.DAYS.between(tour.getStartDate(), tour.getEndDate()) + 1;
 
-        tour.setCode(code);
-        tour.setName(request.getName().trim());
-        tour.setDescription(request.getDescription());
-        tour.setDestination(request.getDestination().trim());
-        tour.setStartDate(request.getStartDate());
-        tour.setEndDate(request.getEndDate());
-        tour.setDurationDays(durationDays);
-        tour.setMaxGuests(request.getMaxGuests());
-        tour.setPrice(request.getPrice());
-        if (request.getStatus() != null) {
-            tour.setStatus(request.getStatus());
+        existing.setCode(code);
+        existing.setName(tour.getName().trim());
+        existing.setDescription(tour.getDescription());
+        existing.setDestination(tour.getDestination().trim());
+        existing.setStartDate(tour.getStartDate());
+        existing.setEndDate(tour.getEndDate());
+        existing.setDurationDays(durationDays);
+        existing.setMaxGuests(tour.getMaxGuests());
+        existing.setPrice(tour.getPrice());
+        if (tour.getStatus() != null) {
+            existing.setStatus(tour.getStatus());
         }
-        tour.setMinGuides(request.getMinGuides() != null ? request.getMinGuides() : 1);
-        tour.setRequiredLanguages(request.getRequiredLanguages());
-        tour.setRequiredSpecialization(request.getRequiredSpecialization());
-        tour.setDepartureRegion(request.getDepartureRegion());
+        existing.setMinGuides(tour.getMinGuides() != null ? tour.getMinGuides() : 1);
+        existing.setRequiredLanguages(tour.getRequiredLanguages());
+        existing.setRequiredSpecialization(tour.getRequiredSpecialization());
+        existing.setDepartureRegion(tour.getDepartureRegion());
 
-        return toSummaryDTO(tourRepository.save(tour));
+        return withAssignedGuideCount(tourRepository.save(existing));
     }
 
     @Override
     @Transactional
-    public void cancelTour(Long id) {
-        Tour tour = tourRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", id));
+    public void cancelTour(Tour tour) {
         if (tour.getStatus() == TourStatus.CANCELLED) {
             throw new BusinessException("Tour đã bị hủy trước đó");
         }
@@ -152,85 +137,9 @@ public class TourServiceImpl implements TourService {
         tourRepository.save(tour);
     }
 
-    private TourSummaryDTO toSummaryDTO(Tour tour) {
+    private Tour withAssignedGuideCount(Tour tour) {
         long count = assignmentRepository.countActiveAssignmentsByTourId(tour.getId());
-        return TourSummaryDTO.builder()
-                .id(tour.getId())
-                .code(tour.getCode())
-                .name(tour.getName())
-                .destination(tour.getDestination())
-                .startDate(tour.getStartDate())
-                .endDate(tour.getEndDate())
-                .durationDays(tour.getDurationDays())
-                .maxGuests(tour.getMaxGuests())
-                .currentGuests(tour.getCurrentGuests())
-                .price(tour.getPrice())
-                .status(tour.getStatus())
-                .minGuides(tour.getMinGuides())
-                .assignedGuideCount(count)
-                .build();
-    }
-
-    private TourDetailDTO toDetailDTO(Tour tour, List<TourItineraryDTO> itineraries) {
-        List<AssignmentDTO> assignmentDTOs = tour.getAssignments().stream()
-                .map(this::toAssignmentDTO)
-                .collect(Collectors.toList());
-
-        return TourDetailDTO.builder()
-                .id(tour.getId())
-                .code(tour.getCode())
-                .name(tour.getName())
-                .description(tour.getDescription())
-                .destination(tour.getDestination())
-                .startDate(tour.getStartDate())
-                .endDate(tour.getEndDate())
-                .durationDays(tour.getDurationDays())
-                .maxGuests(tour.getMaxGuests())
-                .currentGuests(tour.getCurrentGuests())
-                .price(tour.getPrice())
-                .status(tour.getStatus())
-                .requiredLanguages(tour.getRequiredLanguages())
-                .requiredSpecialization(tour.getRequiredSpecialization())
-                .minGuides(tour.getMinGuides())
-                .departureRegion(tour.getDepartureRegion())
-                .assignments(assignmentDTOs)
-                .itineraries(itineraries)
-                .build();
-    }
-
-    private TourItineraryDTO toItineraryDTO(TourItinerary it) {
-        return TourItineraryDTO.builder()
-                .id(it.getId())
-                .tourId(it.getTour().getId())
-                .dayNumber(it.getDayNumber())
-                .sequenceOrder(it.getSequenceOrder())
-                .title(it.getTitle())
-                .description(it.getDescription())
-                .location(it.getLocation())
-                .startTime(it.getStartTime())
-                .endTime(it.getEndTime())
-                .activityType(it.getActivityType())
-                .note(it.getNote())
-                .isOptional(it.getIsOptional())
-                .build();
-    }
-
-    private AssignmentDTO toAssignmentDTO(TourAssignment a) {
-        return AssignmentDTO.builder()
-                .id(a.getId())
-                .tourId(a.getTour().getId())
-                .tourCode(a.getTour().getCode())
-                .tourName(a.getTour().getName())
-                .guideId(a.getGuide().getId())
-                .guideCode(a.getGuide().getCode())
-                .guideName(a.getGuide().getFullName())
-                .guidePhone(a.getGuide().getPhone())
-                .guideLanguages(a.getGuide().getLanguages())
-                .role(a.getRole())
-                .note(a.getNote())
-                .status(a.getStatus())
-                .assignedAt(a.getAssignedAt())
-                .assignedBy(a.getAssignedBy())
-                .build();
+        tour.setAssignedGuideCount(count);
+        return tour;
     }
 }

@@ -1,13 +1,13 @@
 package com.example.tourmanagement.service;
 
-import com.example.tourmanagement.dto.request.TourItineraryRequestDTO;
-import com.example.tourmanagement.dto.response.TourItineraryDTO;
+import com.example.tourmanagement.model.Tour;
+import com.example.tourmanagement.model.TourItinerary;
 
 import java.util.List;
 
 public interface TourItineraryService {
-    List<TourItineraryDTO> getByTourId(Long tourId);
-    TourItineraryDTO create(Long tourId, TourItineraryRequestDTO request);
-    TourItineraryDTO update(Long tourId, Long itineraryId, TourItineraryRequestDTO request);
-    void delete(Long tourId, Long itineraryId);
+    List<TourItinerary> getByTourId(Tour tour);
+    TourItinerary create(Tour tour, TourItinerary itinerary);
+    TourItinerary update(Tour tour, TourItinerary itinerary);
+    void delete(Tour tour, TourItinerary itinerary);
 }

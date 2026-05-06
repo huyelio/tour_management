@@ -16,6 +16,13 @@ const assignStatusColor = {
   CANCELLED: "#ef4444",
 };
 
+const guideInitial = (a) =>
+  (a.guide?.fullName || a.guideName || "?").charAt(0);
+const guideName = (a) => a.guide?.fullName ?? a.guideName;
+const guideCode = (a) => a.guide?.code ?? a.guideCode;
+const guideLanguages = (a) => a.guide?.languages ?? a.guideLanguages;
+const guidePhone = (a) => a.guide?.phone ?? a.guidePhone;
+
 const AssignmentList = ({ assignments, onRefresh }) => {
   const [cancellingId, setCancellingId] = useState(null);
 
@@ -93,16 +100,16 @@ const AssignmentList = ({ assignments, onRefresh }) => {
                 flexShrink: 0,
               }}
             >
-              {a.guideName?.charAt(0)}
+              {guideInitial(a)}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, color: "#111827" }}>
-                {a.guideName}
+                {guideName(a)}
               </div>
               <div
                 style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}
               >
-                {a.guideCode} | {a.guideLanguages} | {a.guidePhone}
+                {guideCode(a)} | {guideLanguages(a)} | {guidePhone(a)}
               </div>
             </div>
             <div
@@ -170,7 +177,7 @@ const AssignmentList = ({ assignments, onRefresh }) => {
                 }}
               >
                 <span style={{ fontWeight: 600, color: "#6b7280", flex: 1 }}>
-                  {a.guideName}
+                  {guideName(a)}
                 </span>
                 <Badge label="Đã hủy" color="#ef4444" />
               </div>

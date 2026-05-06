@@ -11,12 +11,8 @@ import java.util.List;
 @Repository
 public interface TourItineraryRepository extends JpaRepository<TourItinerary, Long> {
 
-    @Query("""
-            SELECT ti
-            FROM TourItinerary ti
-            WHERE ti.tour.id = :tourId
-            ORDER BY ti.dayNumber ASC, ti.sequenceOrder ASC
-            """)
+    @Query("SELECT ti FROM TourItinerary ti WHERE ti.tour.id = :tourId "
+            + "ORDER BY ti.dayNumber ASC, ti.sequenceOrder ASC")
     List<TourItinerary> findByTourIdSorted(@Param("tourId") Long tourId);
 
     boolean existsByTourId(Long tourId);

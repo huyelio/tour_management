@@ -1,12 +1,11 @@
 package com.example.tourmanagement.service.impl;
 
-import com.example.tourmanagement.dto.response.TourGuideDTO;
+import com.example.tourmanagement.exception.BusinessException;
 import com.example.tourmanagement.exception.ResourceNotFoundException;
 import com.example.tourmanagement.model.Tour;
 import com.example.tourmanagement.model.TourGuide;
 import com.example.tourmanagement.model.enums.GuideStatus;
 import com.example.tourmanagement.repository.TourGuideRepository;
-import com.example.tourmanagement.repository.TourRepository;
 import com.example.tourmanagement.service.TourGuideService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,88 +23,70 @@ import java.util.stream.Collectors;
 public class TourGuideServiceImpl implements TourGuideService {
 
     private final TourGuideRepository guideRepository;
-    private final TourRepository tourRepository;
 
     @Override
-    public List<TourGuideDTO> getAllGuides() {
-        return guideRepository.findAll().stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+    public List<TourGuide> getAllGuides() {
+        return guideRepository.findAll();
     }
 
     @Override
-    public TourGuideDTO getGuideById(Long id) {
-        TourGuide guide = guideRepository.findById(id)
+    public TourGuide getGuideById(Long id) {
+        return guideRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Hướng dẫn viên", id));
-        return toDTO(guide);
     }
 
     @Override
-    public List<TourGuideDTO> filterGuides(GuideStatus status, String specialization, String language, String region) {
-        return guideRepository.findByFilters(status, specialization, language, region).stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+    public List<TourGuide> filterGuides(GuideStatus status, String specialization, String language, String region) {
+        return guideRepository.findByFilters(status, specialization, language, region);
     }
 
     @Override
-    public List<TourGuideDTO> getGuidesForTour(Long tourId) {
-        // 1. Tải tour để lấy khoảng thời gian
-        Tour tour = tourRepository.findById(tourId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
+    public List<TourGuide> getGuidesForTour(Tour tour) {
+        Long tourId = tour.getId();
+        if (tourId == null) {
+            throw new BusinessException("Tour cần có ID");
+        }
 
-        // 2. Lấy tập ID HDV đang trùng lịch với tour (query 1 lần thay vì N lần)
         Set<Long> overlappingIds = new HashSet<>(
                 guideRepository.findGuideIdsWithScheduleOverlap(tour.getStartDate(), tour.getEndDate(), tourId)
         );
 
-        // 3. Lấy tất cả HDV (không lọc specialization/language/region/status)
         return guideRepository.findAll().stream()
-                .map(g -> {
-                    String warning = null;
-                    if (g.getStatus() == GuideStatus.INACTIVE) {
-                        warning = "Hướng dẫn viên không hoạt động";
-                    } else if (g.getStatus() == GuideStatus.ON_LEAVE) {
-                        warning = "Hướng dẫn viên đang nghỉ phép";
-                    } else if (overlappingIds.contains(g.getId())) {
-                        warning = "Trùng lịch với tour khác";
-                    }
-                    return TourGuideDTO.builder()
-                            .id(g.getId())
-                            .code(g.getCode())
-                            .fullName(g.getFullName())
-                            .email(g.getEmail())
-                            .phone(g.getPhone())
-                            .specialization(g.getSpecialization())
-                            .languages(g.getLanguages())
-                            .region(g.getRegion())
-                            .experienceYears(g.getExperienceYears())
-                            .status(g.getStatus())
-                            .avatarUrl(g.getAvatarUrl())
-                            .bio(g.getBio())
-                            .availabilityWarning(warning)
-                            .eligible(warning == null)
-                            .build();
-                })
-                // Eligible (phù hợp) lên trước, trong nhóm sắp xếp theo tên
-                .sorted(Comparator.comparing(TourGuideDTO::isEligible).reversed()
-                        .thenComparing(TourGuideDTO::getFullName))
+                .map(g -> copyWithTourHints(g, overlappingIds))
+                .sorted(Comparator
+                        .comparing((TourGuide g) -> Boolean.TRUE.equals(g.getEligible()))
+                        .reversed()
+                        .thenComparing(TourGuide::getFullName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .collect(Collectors.toList());
     }
 
-    private TourGuideDTO toDTO(TourGuide guide) {
-        return TourGuideDTO.builder()
-                .id(guide.getId())
-                .code(guide.getCode())
-                .fullName(guide.getFullName())
-                .email(guide.getEmail())
-                .phone(guide.getPhone())
-                .specialization(guide.getSpecialization())
-                .languages(guide.getLanguages())
-                .region(guide.getRegion())
-                .experienceYears(guide.getExperienceYears())
-                .status(guide.getStatus())
-                .avatarUrl(guide.getAvatarUrl())
-                .bio(guide.getBio())
+    /** Bản sao tách persistence context — tránh ghi @Transient lên entity đang managed. */
+    private static TourGuide copyWithTourHints(TourGuide src, Set<Long> overlappingIds) {
+        String warning = null;
+        if (src.getStatus() == GuideStatus.INACTIVE) {
+            warning = "Hướng dẫn viên không hoạt động";
+        } else if (src.getStatus() == GuideStatus.ON_LEAVE) {
+            warning = "Hướng dẫn viên đang nghỉ phép";
+        } else if (overlappingIds.contains(src.getId())) {
+            warning = "Trùng lịch với tour khác";
+        }
+        TourGuide g = TourGuide.builder()
+                .id(src.getId())
+                .code(src.getCode())
+                .fullName(src.getFullName())
+                .email(src.getEmail())
+                .phone(src.getPhone())
+                .dateOfBirth(src.getDateOfBirth())
+                .specialization(src.getSpecialization())
+                .languages(src.getLanguages())
+                .region(src.getRegion())
+                .experienceYears(src.getExperienceYears())
+                .status(src.getStatus())
+                .avatarUrl(src.getAvatarUrl())
+                .bio(src.getBio())
                 .build();
+        g.setAvailabilityWarning(warning);
+        g.setEligible(warning == null);
+        return g;
     }
 }

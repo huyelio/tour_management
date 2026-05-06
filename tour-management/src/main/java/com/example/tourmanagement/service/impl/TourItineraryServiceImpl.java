@@ -1,21 +1,18 @@
 package com.example.tourmanagement.service.impl;
 
-import com.example.tourmanagement.dto.request.TourItineraryRequestDTO;
-import com.example.tourmanagement.dto.response.TourItineraryDTO;
 import com.example.tourmanagement.exception.BusinessException;
 import com.example.tourmanagement.exception.ResourceNotFoundException;
 import com.example.tourmanagement.model.Tour;
 import com.example.tourmanagement.model.TourItinerary;
 import com.example.tourmanagement.model.enums.TourStatus;
 import com.example.tourmanagement.repository.TourItineraryRepository;
-import com.example.tourmanagement.repository.TourRepository;
 import com.example.tourmanagement.service.TourItineraryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,94 +20,83 @@ import java.util.stream.Collectors;
 public class TourItineraryServiceImpl implements TourItineraryService {
 
     private final TourItineraryRepository itineraryRepository;
-    private final TourRepository tourRepository;
 
     @Override
-    public List<TourItineraryDTO> getByTourId(Long tourId) {
-        if (!tourRepository.existsById(tourId)) {
-            throw new ResourceNotFoundException("Tour", tourId);
+    public List<TourItinerary> getByTourId(Tour tour) {
+        Long tourId = tour.getId();
+        if (tourId == null) {
+            throw new BusinessException("Tour cần có ID");
         }
-        return itineraryRepository.findByTourIdSorted(tourId)
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+        return itineraryRepository.findByTourIdSorted(tourId);
     }
 
     @Override
     @Transactional
-    public TourItineraryDTO create(Long tourId, TourItineraryRequestDTO request) {
-        Tour tour = tourRepository.findById(tourId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
-
+    public TourItinerary create(Tour tour, TourItinerary itinerary) {
         validateTourEditable(tour);
-        validateDayNumber(tourId, request.getDayNumber(), request.getSequenceOrder(), tour.getDurationDays(), null);
-        validateTime(request);
+        itinerary.setTour(tour);
+        Long tourId = tour.getId();
+        validateDayNumber(tourId, itinerary.getDayNumber(), itinerary.getSequenceOrder(), tour.getDurationDays(), null);
+        validateTime(itinerary.getStartTime(), itinerary.getEndTime());
+        itinerary.setTitle(itinerary.getTitle().trim());
 
-        TourItinerary itinerary = TourItinerary.builder()
-                .tour(tour)
-                .dayNumber(request.getDayNumber())
-                .sequenceOrder(request.getSequenceOrder())
-                .title(request.getTitle().trim())
-                .description(request.getDescription())
-                .location(request.getLocation())
-                .startTime(request.getStartTime())
-                .endTime(request.getEndTime())
-                .activityType(request.getActivityType())
-                .note(request.getNote())
-                .isOptional(request.getIsOptional() != null ? request.getIsOptional() : false)
-                .build();
-
-        return toDTO(itineraryRepository.save(itinerary));
+        return itineraryRepository.save(itinerary);
     }
 
     @Override
     @Transactional
-    public TourItineraryDTO update(Long tourId, Long itineraryId, TourItineraryRequestDTO request) {
-        Tour tour = tourRepository.findById(tourId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
-
+    public TourItinerary update(Tour tour, TourItinerary itinerary) {
         validateTourEditable(tour);
 
-        TourItinerary itinerary = itineraryRepository.findById(itineraryId)
+        Long tourId = tour.getId();
+        Long itineraryId = itinerary.getId();
+        if (tourId == null || itineraryId == null) {
+            throw new BusinessException("Tour và lịch trình cần có ID");
+        }
+
+        TourItinerary managed = itineraryRepository.findById(itineraryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lịch trình", itineraryId));
 
-        if (!itinerary.getTour().getId().equals(tourId)) {
+        if (!managed.getTour().getId().equals(tourId)) {
             throw new BusinessException("Lịch trình không thuộc tour này");
         }
 
-        validateDayNumber(tourId, request.getDayNumber(), request.getSequenceOrder(), tour.getDurationDays(), itineraryId);
-        validateTime(request);
+        validateDayNumber(tourId, itinerary.getDayNumber(), itinerary.getSequenceOrder(), tour.getDurationDays(), itineraryId);
+        validateTime(itinerary.getStartTime(), itinerary.getEndTime());
 
-        itinerary.setDayNumber(request.getDayNumber());
-        itinerary.setSequenceOrder(request.getSequenceOrder());
-        itinerary.setTitle(request.getTitle().trim());
-        itinerary.setDescription(request.getDescription());
-        itinerary.setLocation(request.getLocation());
-        itinerary.setStartTime(request.getStartTime());
-        itinerary.setEndTime(request.getEndTime());
-        itinerary.setActivityType(request.getActivityType());
-        itinerary.setNote(request.getNote());
-        itinerary.setIsOptional(request.getIsOptional() != null ? request.getIsOptional() : false);
+        managed.setDayNumber(itinerary.getDayNumber());
+        managed.setSequenceOrder(itinerary.getSequenceOrder());
+        managed.setTitle(itinerary.getTitle().trim());
+        managed.setDescription(itinerary.getDescription());
+        managed.setLocation(itinerary.getLocation());
+        managed.setStartTime(itinerary.getStartTime());
+        managed.setEndTime(itinerary.getEndTime());
+        managed.setActivityType(itinerary.getActivityType());
+        managed.setNote(itinerary.getNote());
+        managed.setIsOptional(itinerary.getIsOptional() != null ? itinerary.getIsOptional() : false);
 
-        return toDTO(itineraryRepository.save(itinerary));
+        return itineraryRepository.save(managed);
     }
 
     @Override
     @Transactional
-    public void delete(Long tourId, Long itineraryId) {
-        Tour tour = tourRepository.findById(tourId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
-
+    public void delete(Tour tour, TourItinerary itinerary) {
         validateTourEditable(tour);
 
-        TourItinerary itinerary = itineraryRepository.findById(itineraryId)
+        Long tourId = tour.getId();
+        Long itineraryId = itinerary.getId();
+        if (tourId == null || itineraryId == null) {
+            throw new BusinessException("Tour và lịch trình cần có ID");
+        }
+
+        TourItinerary managed = itineraryRepository.findById(itineraryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lịch trình", itineraryId));
 
-        if (!itinerary.getTour().getId().equals(tourId)) {
+        if (!managed.getTour().getId().equals(tourId)) {
             throw new BusinessException("Lịch trình không thuộc tour này");
         }
 
-        itineraryRepository.delete(itinerary);
+        itineraryRepository.delete(managed);
     }
 
     private void validateTourEditable(Tour tour) {
@@ -150,38 +136,19 @@ public class TourItineraryServiceImpl implements TourItineraryService {
             Integer sequenceOrder,
             Long excludeItineraryId
     ) {
-        // Create: chưa có itinerary hiện tại để loại trừ.
         if (excludeItineraryId == null) {
             return itineraryRepository.existsByTourIdAndDayNumberAndSequenceOrder(
                     tourId, dayNumber, sequenceOrder);
         }
 
-        // Update: loại trừ chính itinerary đang sửa để tránh tự "trùng chính mình".
         return itineraryRepository.existsByTourIdAndDayNumberAndSequenceOrderAndIdNot(
                 tourId, dayNumber, sequenceOrder, excludeItineraryId);
     }
 
-    private void validateTime(TourItineraryRequestDTO request) {
-        if (request.getStartTime() != null && request.getEndTime() != null
-                && !request.getStartTime().isBefore(request.getEndTime())) {
+    private void validateTime(LocalTime startTime, LocalTime endTime) {
+        if (startTime != null && endTime != null
+                && !startTime.isBefore(endTime)) {
             throw new BusinessException("Giờ bắt đầu phải trước giờ kết thúc");
         }
-    }
-
-    private TourItineraryDTO toDTO(TourItinerary it) {
-        return TourItineraryDTO.builder()
-                .id(it.getId())
-                .tourId(it.getTour().getId())
-                .dayNumber(it.getDayNumber())
-                .sequenceOrder(it.getSequenceOrder())
-                .title(it.getTitle())
-                .description(it.getDescription())
-                .location(it.getLocation())
-                .startTime(it.getStartTime())
-                .endTime(it.getEndTime())
-                .activityType(it.getActivityType())
-                .note(it.getNote())
-                .isOptional(it.getIsOptional())
-                .build();
     }
 }

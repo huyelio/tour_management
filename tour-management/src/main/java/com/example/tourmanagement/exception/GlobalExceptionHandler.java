@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+/**
+ * Xử lý lỗi tập trung cho mọi controller REST — tránh try/catch lặp trong từng endpoint.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

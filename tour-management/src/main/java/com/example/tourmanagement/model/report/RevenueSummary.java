@@ -1,4 +1,4 @@
-package com.example.tourmanagement.dto.response;
+package com.example.tourmanagement.model.report;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,14 +11,9 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RevenueSummaryDTO {
+public class RevenueSummary {
 
-    /** Số tour thỏa điều kiện lọc */
     private int totalTours;
-
-    /** Tổng khách từ tất cả tour trong kết quả */
     private Long totalGuests;
-
-    /** Tổng doanh thu từ tất cả tour trong kết quả */
     private BigDecimal totalRevenue;
 }

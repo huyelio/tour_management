@@ -1,7 +1,7 @@
 package com.example.tourmanagement.service;
 
-import com.example.tourmanagement.dto.response.RevenueReportDTO;
 import com.example.tourmanagement.model.enums.TourStatus;
+import com.example.tourmanagement.model.report.RevenueReport;
 
 import java.time.LocalDate;
 
@@ -16,7 +16,7 @@ public interface ReportService {
      * @param destination Tên điểm đến (nullable/blank = tất cả, tìm kiếm gần đúng)
      * @param sortBy      Cách sắp xếp: revenue_desc | date_desc | name_asc
      */
-    RevenueReportDTO getTourRevenueReport(
+    RevenueReport getTourRevenueReport(
             LocalDate fromDate,
             LocalDate toDate,
             TourStatus tourStatus,

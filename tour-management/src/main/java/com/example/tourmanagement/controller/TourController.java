@@ -1,17 +1,19 @@
 package com.example.tourmanagement.controller;
 
-import com.example.tourmanagement.dto.request.TourRequestDTO;
+import com.example.tourmanagement.controller.support.TourEntityLoader;
 import com.example.tourmanagement.dto.response.ApiResponse;
-import com.example.tourmanagement.dto.response.TourDetailDTO;
-import com.example.tourmanagement.dto.response.TourSummaryDTO;
+import com.example.tourmanagement.model.Tour;
 import com.example.tourmanagement.model.enums.TourStatus;
+import com.example.tourmanagement.model.json.TourJsonViews;
 import com.example.tourmanagement.service.TourService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.json.MappingJacksonValue;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -20,63 +22,90 @@ import java.util.List;
 public class TourController {
 
     private final TourService tourService;
+    private final TourEntityLoader tourLoader;
 
-    // GET /api/tours?keyword=...&status=...&activeOnly=true
     @GetMapping
-    public ResponseEntity<ApiResponse<List<TourSummaryDTO>>> getAllTours(
+    public ResponseEntity<MappingJacksonValue> getAllTours(
             @RequestParam(defaultValue = "false") boolean activeOnly,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status
     ) {
-        List<TourSummaryDTO> tours;
-        // if (keyword != null || status != null) {
-        //     TourStatus tourStatus = null;
-        //     if (status != null && !status.isBlank()) {
-        //         try {
-        //             tourStatus = TourStatus.valueOf(status.toUpperCase());
-        //         } catch (IllegalArgumentException ignored) {
-        //         }
-        //     }searchTours
-        //     tours = tourService.(keyword, tourStatus);
-        if (activeOnly) {
+        TourStatus tourStatus = parseOptionalTourStatus(status);
+        boolean hasFilter = (keyword != null && !keyword.isBlank()) || tourStatus != null;
+
+        List<Tour> tours;
+        if (hasFilter) {
+            tours = tourService.searchTours(
+                    keyword != null && !keyword.isBlank() ? keyword.trim() : null,
+                    tourStatus
+            );
+        } else if (activeOnly) {
             tours = tourService.getActiveTours();
         } else {
             tours = tourService.getAllTours();
         }
-        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách tour thành công", tours));
+
+        MappingJacksonValue wrapped = new MappingJacksonValue(
+                ApiResponse.ok("Lấy danh sách tour thành công", tours));
+        wrapped.setSerializationView(TourJsonViews.ListItem.class);
+        return ResponseEntity.ok(wrapped);
     }
 
-    // GET /api/tours/{id}
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<TourDetailDTO>> getTourById(@PathVariable Long id) {
-        TourDetailDTO tour = tourService.getTourById(id);
-        return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết tour thành công", tour));
+    public ResponseEntity<MappingJacksonValue> getTourById(@PathVariable Long id) {
+        Tour tour = tourService.getTourById(id);
+        MappingJacksonValue wrapped = new MappingJacksonValue(
+                ApiResponse.ok("Lấy chi tiết tour thành công", tour));
+        wrapped.setSerializationView(TourJsonViews.Detail.class);
+        return ResponseEntity.ok(wrapped);
     }
 
-    // POST /api/tours
     @PostMapping
-    public ResponseEntity<ApiResponse<TourSummaryDTO>> createTour(
-            @Valid @RequestBody TourRequestDTO request
-    ) {
-        TourSummaryDTO created = tourService.createTour(request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Tạo tour thành công", created));
+    public ResponseEntity<MappingJacksonValue> createTour(@Valid @RequestBody Tour tour) {
+        tour.setId(null);
+        tour.setAssignedGuideCount(null);
+        tour.setAssignments(new ArrayList<>());
+        tour.setBookings(new ArrayList<>());
+        tour.setItineraries(new ArrayList<>());
+        Tour created = tourService.createTour(tour);
+        MappingJacksonValue wrapped = new MappingJacksonValue(
+                ApiResponse.ok("Tạo tour thành công", created));
+        wrapped.setSerializationView(TourJsonViews.ListItem.class);
+        return ResponseEntity.status(HttpStatus.CREATED).body(wrapped);
     }
 
-    // PUT /api/tours/{id}
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<TourSummaryDTO>> updateTour(
+    public ResponseEntity<MappingJacksonValue> updateTour(
             @PathVariable Long id,
-            @Valid @RequestBody TourRequestDTO request
+            @Valid @RequestBody Tour tour
     ) {
-        TourSummaryDTO updated = tourService.updateTour(id, request);
-        return ResponseEntity.ok(ApiResponse.ok("Cập nhật tour thành công", updated));
+        tour.setId(id);
+        tour.setAssignedGuideCount(null);
+        tour.setAssignments(null);
+        tour.setBookings(null);
+        tour.setItineraries(null);
+        Tour updated = tourService.updateTour(tour);
+        MappingJacksonValue wrapped = new MappingJacksonValue(
+                ApiResponse.ok("Cập nhật tour thành công", updated));
+        wrapped.setSerializationView(TourJsonViews.ListItem.class);
+        return ResponseEntity.ok(wrapped);
     }
 
-    // DELETE /api/tours/{id} — cập nhật trạng thái thành CANCELLED (xóa mềm)
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> cancelTour(@PathVariable Long id) {
-        tourService.cancelTour(id);
+        Tour tour = tourLoader.requireById(id);
+        tourService.cancelTour(tour);
         return ResponseEntity.ok(ApiResponse.ok("Hủy tour thành công", null));
+    }
+
+    private static TourStatus parseOptionalTourStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return TourStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 }

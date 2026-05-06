@@ -1,4 +1,4 @@
-package com.example.tourmanagement.dto.response;
+package com.example.tourmanagement.model.report;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,8 +11,8 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RevenueReportDTO {
+public class RevenueReport {
 
-    private RevenueSummaryDTO summary;
-    private List<TourRevenueDTO> tours;
+    private RevenueSummary summary;
+    private List<TourRevenue> tours;
 }

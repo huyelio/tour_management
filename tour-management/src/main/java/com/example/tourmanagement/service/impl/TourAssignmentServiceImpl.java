@@ -1,7 +1,5 @@
 package com.example.tourmanagement.service.impl;
 
-import com.example.tourmanagement.dto.request.AssignmentRequestDTO;
-import com.example.tourmanagement.dto.response.AssignmentDTO;
 import com.example.tourmanagement.exception.BusinessException;
 import com.example.tourmanagement.exception.ResourceNotFoundException;
 import com.example.tourmanagement.model.Tour;
@@ -21,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,10 +31,12 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AssignmentDTO> getAssignmentsByTourId(Long tourId) {
-        return assignmentRepository.findByTourIdWithDetails(tourId).stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+    public List<TourAssignment> getAssignmentsByTour(Tour tour) {
+        Long tourId = tour.getId();
+        if (tourId == null) {
+            throw new BusinessException("Tour cần có ID");
+        }
+        return assignmentRepository.findByTourIdWithDetails(tourId);
     }
 
     /**
@@ -54,11 +53,27 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
      */
     @Override
     @Transactional
-    public List<AssignmentDTO> saveAssignments(AssignmentRequestDTO request) {
-        // Bước 1: Lấy trạng thái tour theo đúng luồng getStatus() -> tourRepository.findById()
-        TourStatus tourStatus = getStatus(request.getTourId());
+    public List<TourAssignment> saveAssignments(List<TourAssignment> assignments) {
+        if (assignments == null || assignments.isEmpty()) {
+            throw new BusinessException("Phải có ít nhất một phân công hướng dẫn viên");
+        }
 
-        // Bước 2: Chỉ cho phân công khi tour đang ở trạng thái PLANNING hoặc OPEN
+        Tour tour = assignments.get(0).getTour();
+        if (tour == null || tour.getId() == null) {
+            throw new BusinessException("Tour không hợp lệ");
+        }
+        for (TourAssignment pending : assignments) {
+            if (pending.getTour() == null || pending.getGuide() == null
+                    || !pending.getTour().getId().equals(tour.getId())) {
+                throw new BusinessException("Mỗi phân công phải cùng một tour và có hướng dẫn viên");
+            }
+        }
+
+        // Bước 1–2: Trạng thái tour (managed entity — đồng bộ với DB)
+        Tour managedTour = tourRepository.findById(tour.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", tour.getId()));
+        TourStatus tourStatus = managedTour.getStatus();
+
         if (tourStatus != TourStatus.PLANNING && tourStatus != TourStatus.OPEN) {
             String statusLabel;
             switch (tourStatus) {
@@ -83,19 +98,11 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
             );
         }
 
-        // Lấy tour để dùng cho các bước tiếp theo (trùng lịch, tồn tại phân công, save)
-        Tour tour = tourRepository.findById(request.getTourId())
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", request.getTourId()));
-
         List<TourAssignment> savedAssignments = new ArrayList<>();
 
-        // Bước 3: Validate và tạo phân công cho từng hướng dẫn viên
-        for (AssignmentRequestDTO.GuideAssignmentItem item : request.getGuides()) {
-            // 3a. Tìm hướng dẫn viên
-            TourGuide guide = guideRepository.findById(item.getGuideId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Hướng dẫn viên", item.getGuideId()));
+        for (TourAssignment pending : assignments) {
+            TourGuide guide = pending.getGuide();
 
-            // 3b. Kiểm tra trạng thái hoạt động
             if (guide.getStatus() == GuideStatus.INACTIVE) {
                 throw new BusinessException(
                     "Hướng dẫn viên '" + guide.getFullName() + "' hiện không hoạt động, không thể phân công"
@@ -107,23 +114,21 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
                 );
             }
 
-            // 3c. Kiểm tra trùng lịch
             long overlapCount = guideRepository.countScheduleOverlaps(
                 guide.getId(),
-                tour.getStartDate(),
-                tour.getEndDate(),
-                tour.getId()
+                managedTour.getStartDate(),
+                managedTour.getEndDate(),
+                managedTour.getId()
             );
             if (overlapCount > 0) {
                 throw new BusinessException(
                     "Hướng dẫn viên '" + guide.getFullName() + "' đã có lịch trùng với tour khác trong khoảng thời gian " +
-                    tour.getStartDate() + " đến " + tour.getEndDate()
+                    managedTour.getStartDate() + " đến " + managedTour.getEndDate()
                 );
             }
 
-            // 3d. Kiểm tra đã phân công chưa
             boolean alreadyAssigned = assignmentRepository.existsByTourIdAndGuideIdAndStatusNot(
-                tour.getId(), guide.getId(), AssignmentStatus.CANCELLED
+                managedTour.getId(), guide.getId(), AssignmentStatus.CANCELLED
             );
             if (alreadyAssigned) {
                 throw new BusinessException(
@@ -131,37 +136,30 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
                 );
             }
 
-            // 3e. Tạo phân công
             TourAssignment assignment = TourAssignment.builder()
-                    .tour(tour)
+                    .tour(managedTour)
                     .guide(guide)
-                    .role(item.getRole() != null ? item.getRole() : "LEAD")
-                    .note(item.getNote())
+                    .role(pending.getRole() != null ? pending.getRole() : "LEAD")
+                    .note(pending.getNote())
                     .status(AssignmentStatus.ASSIGNED)
-                    .assignedBy("admin") 
+                    .assignedBy("admin")
                     .build();
 
             savedAssignments.add(assignmentRepository.save(assignment));
-            log.info("Đã phân công guide '{}' cho tour '{}'", guide.getFullName(), tour.getName());
+            log.info("Đã phân công guide '{}' cho tour '{}'", guide.getFullName(), managedTour.getName());
         }
 
-        // Bước 5: Kiểm tra và cập nhật trạng thái tour
-        updateTourStatusIfNeeded(tour);
+        updateTourStatusIfNeeded(managedTour);
 
-        return savedAssignments.stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+        return savedAssignments;
     }
 
     @Override
     @Transactional
-    public void cancelAssignment(Long assignmentId) {
-        TourAssignment assignment = assignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Phân công", assignmentId));
-
+    public void cancelAssignment(TourAssignment assignment) {
         assignment.setStatus(AssignmentStatus.CANCELLED);
         assignmentRepository.save(assignment);
-        log.info("Đã hủy phân công ID: {}", assignmentId);
+        log.info("Đã hủy phân công ID: {}", assignment.getId());
     }
 
     /**
@@ -177,32 +175,4 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
         }
     }
 
-    /**
-     * Luồng kiểm tra trạng thái tour:
-     * TourAssignmentServiceImpl -> getStatus() -> TourRepository.findById()
-     */
-    private TourStatus getStatus(Long tourId) {
-        return tourRepository.findById(tourId)
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId))
-                .getStatus();
-    }
-
-    private AssignmentDTO toDTO(TourAssignment a) {
-        return AssignmentDTO.builder()
-                .id(a.getId())
-                .tourId(a.getTour().getId())
-                .tourCode(a.getTour().getCode())
-                .tourName(a.getTour().getName())
-                .guideId(a.getGuide().getId())
-                .guideCode(a.getGuide().getCode())
-                .guideName(a.getGuide().getFullName())
-                .guidePhone(a.getGuide().getPhone())
-                .guideLanguages(a.getGuide().getLanguages())
-                .role(a.getRole())
-                .note(a.getNote())
-                .status(a.getStatus())
-                .assignedAt(a.getAssignedAt())
-                .assignedBy(a.getAssignedBy())
-                .build();
-    }
 }

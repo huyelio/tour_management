@@ -1,12 +1,12 @@
 package com.example.tourmanagement.service.impl;
 
-import com.example.tourmanagement.dto.response.RevenueReportDTO;
-import com.example.tourmanagement.dto.response.RevenueSummaryDTO;
-import com.example.tourmanagement.dto.response.TourRevenueDTO;
 import com.example.tourmanagement.exception.BusinessException;
 import com.example.tourmanagement.model.Tour;
 import com.example.tourmanagement.model.enums.BookingStatus;
 import com.example.tourmanagement.model.enums.TourStatus;
+import com.example.tourmanagement.model.report.RevenueReport;
+import com.example.tourmanagement.model.report.RevenueSummary;
+import com.example.tourmanagement.model.report.TourRevenue;
 import com.example.tourmanagement.repository.BookingRepository;
 import com.example.tourmanagement.repository.TourRepository;
 import com.example.tourmanagement.repository.TourRevenueProjection;
@@ -35,7 +35,7 @@ public class ReportServiceImpl implements ReportService {
             List.of(BookingStatus.CONFIRMED, BookingStatus.COMPLETED);
 
     @Override
-    public RevenueReportDTO getTourRevenueReport(
+    public RevenueReport getTourRevenueReport(
             LocalDate fromDate, LocalDate toDate,
             TourStatus tourStatus, String destination, String sortBy) {
 
@@ -58,10 +58,10 @@ public class ReportServiceImpl implements ReportService {
                 .collect(Collectors.toMap(TourRevenueProjection::getTourId, p -> p));
 
         // 3. Gộp thông tin tour + doanh thu
-        List<TourRevenueDTO> tourRevenues = tours.stream()
+        List<TourRevenue> tourRevenues = tours.stream()
                 .map(t -> {
                     TourRevenueProjection proj = revenueMap.get(t.getId());
-                    return TourRevenueDTO.builder()
+                    return TourRevenue.builder()
                             .tourId(t.getId())
                             .tourCode(t.getCode())
                             .tourName(t.getName())
@@ -79,34 +79,37 @@ public class ReportServiceImpl implements ReportService {
 
         // 5. Tính tổng
         BigDecimal totalRevenue = tourRevenues.stream()
-                .map(TourRevenueDTO::getTotalRevenue)
+                .map(TourRevenue::getTotalRevenue)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         long totalGuests = tourRevenues.stream()
-                .mapToLong(TourRevenueDTO::getTotalGuests)
+                .mapToLong(TourRevenue::getTotalGuests)
                 .sum();
 
-        RevenueSummaryDTO summary = RevenueSummaryDTO.builder()
+        RevenueSummary summary = RevenueSummary.builder()
                 .totalTours(tourRevenues.size())
                 .totalRevenue(totalRevenue)
                 .totalGuests(totalGuests)
                 .build();
 
-        return RevenueReportDTO.builder()
+        return RevenueReport.builder()
                 .summary(summary)
                 .tours(tourRevenues)
                 .build();
     }
 
-    private void sortTourRevenues(List<TourRevenueDTO> list, String sortBy) {
-        Comparator<TourRevenueDTO> comparator = switch (sortBy != null ? sortBy : "") {
-            case "date_desc" -> Comparator.comparing(
-                    TourRevenueDTO::getStartDate, Comparator.nullsLast(Comparator.reverseOrder()));
-            case "name_asc"  -> Comparator.comparing(
-                    TourRevenueDTO::getTourName, String.CASE_INSENSITIVE_ORDER);
-            // revenue_desc là mặc định
-            default          -> Comparator.comparing(
-                    TourRevenueDTO::getTotalRevenue, Comparator.nullsLast(Comparator.reverseOrder()));
-        };
+    private void sortTourRevenues(List<TourRevenue> list, String sortBy) {
+        String key = sortBy != null ? sortBy : "";
+        Comparator<TourRevenue> comparator;
+        if ("date_desc".equals(key)) {
+            comparator = Comparator.comparing(
+                    TourRevenue::getStartDate, Comparator.nullsLast(Comparator.reverseOrder()));
+        } else if ("name_asc".equals(key)) {
+            comparator = Comparator.comparing(
+                    TourRevenue::getTourName, String.CASE_INSENSITIVE_ORDER);
+        } else {
+            comparator = Comparator.comparing(
+                    TourRevenue::getTotalRevenue, Comparator.nullsLast(Comparator.reverseOrder()));
+        }
         list.sort(comparator);
     }
 }

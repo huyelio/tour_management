@@ -1,6 +1,12 @@
 package com.example.tourmanagement.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.time.LocalTime;
@@ -12,6 +18,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler", "tour"}, ignoreUnknown = true)
 public class TourItinerary {
 
     @Id
@@ -20,15 +27,22 @@ public class TourItinerary {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tour_id", nullable = false)
+    @JsonIgnore
     private Tour tour;
 
     @Column(name = "day_number", nullable = false)
+    @NotNull(message = "Số ngày không được để trống")
+    @Min(value = 1, message = "Số ngày phải >= 1")
     private Integer dayNumber;
 
     @Column(name = "sequence_order", nullable = false)
+    @NotNull(message = "Thứ tự không được để trống")
+    @Min(value = 1, message = "Thứ tự phải >= 1")
     private Integer sequenceOrder;
 
     @Column(name = "title", nullable = false, length = 200)
+    @NotBlank(message = "Tiêu đề không được để trống")
+    @Size(max = 200, message = "Tiêu đề tối đa 200 ký tự")
     private String title;
 
     @Column(name = "description", columnDefinition = "TEXT")

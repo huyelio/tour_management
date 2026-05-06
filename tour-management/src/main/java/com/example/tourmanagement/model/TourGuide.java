@@ -1,6 +1,8 @@
 package com.example.tourmanagement.model;
 
 import com.example.tourmanagement.model.enums.GuideStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,6 +17,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class TourGuide {
 
     @Id
@@ -61,6 +64,15 @@ public class TourGuide {
     @Column(name = "bio", columnDefinition = "TEXT")
     private String bio;
 
+    /** Gợi ý UI khi chọn HDV cho tour — không map DB. */
+    @Transient
+    private String availabilityWarning;
+
+    /** {@code true} khi có thể phân công cho tour hiện tại (không map DB). */
+    @Transient
+    private Boolean eligible;
+
     @OneToMany(mappedBy = "guide", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<TourAssignment> assignments = new ArrayList<>();
 }

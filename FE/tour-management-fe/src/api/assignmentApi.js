@@ -5,10 +5,9 @@ export const assignmentApi = {
   getByTour: (tourId) =>
     api.get(`/assignments/tour/${tourId}`).then(r => r.data),
 
-  // Lưu phân công (nhiều guide cùng lúc)
-  // request: { tourId, guides: [{ guideId, role, note }] }
-  save: (request) =>
-    api.post('/assignments', request).then(r => r.data),
+  // Body: [ { tour: { id }, guide: { id }, role, note }, ... ]
+  save: (assignments) =>
+    api.post('/assignments', assignments).then(r => r.data),
 
   // Hủy phân công
   cancel: (assignmentId) =>
