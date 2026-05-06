@@ -43,7 +43,7 @@ public class TourItineraryServiceImpl implements TourItineraryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
 
         validateTourEditable(tour);
-        validateDayNumber(request.getDayNumber(), tour.getDurationDays());
+        validateDayNumber(tourId, request.getDayNumber(), request.getSequenceOrder(), tour.getDurationDays(), null);
         validateTime(request);
 
         TourItinerary itinerary = TourItinerary.builder()
@@ -78,7 +78,7 @@ public class TourItineraryServiceImpl implements TourItineraryService {
             throw new BusinessException("Lịch trình không thuộc tour này");
         }
 
-        validateDayNumber(request.getDayNumber(), tour.getDurationDays());
+        validateDayNumber(tourId, request.getDayNumber(), request.getSequenceOrder(), tour.getDurationDays(), itineraryId);
         validateTime(request);
 
         itinerary.setDayNumber(request.getDayNumber());
@@ -122,12 +122,43 @@ public class TourItineraryServiceImpl implements TourItineraryService {
         }
     }
 
-    private void validateDayNumber(Integer dayNumber, Integer durationDays) {
+    private void validateDayNumber(
+            Long tourId,
+            Integer dayNumber,
+            Integer sequenceOrder,
+            Integer durationDays,
+            Long excludeItineraryId
+    ) {
         if (durationDays == null || durationDays <= 0) return;
         if (dayNumber > durationDays) {
             throw new BusinessException(
                 "Ngày " + dayNumber + " vượt quá số ngày của tour (" + durationDays + " ngày)");
         }
+
+        boolean duplicatedOrder = isDuplicatedSequenceOrder(
+                tourId, dayNumber, sequenceOrder, excludeItineraryId);
+
+        if (duplicatedOrder) {
+            throw new BusinessException(
+                    "Trong ngày " + dayNumber + " đã tồn tại hoạt động ở thứ tự " + sequenceOrder);
+        }
+    }
+
+    private boolean isDuplicatedSequenceOrder(
+            Long tourId,
+            Integer dayNumber,
+            Integer sequenceOrder,
+            Long excludeItineraryId
+    ) {
+        // Create: chưa có itinerary hiện tại để loại trừ.
+        if (excludeItineraryId == null) {
+            return itineraryRepository.existsByTourIdAndDayNumberAndSequenceOrder(
+                    tourId, dayNumber, sequenceOrder);
+        }
+
+        // Update: loại trừ chính itinerary đang sửa để tránh tự "trùng chính mình".
+        return itineraryRepository.existsByTourIdAndDayNumberAndSequenceOrderAndIdNot(
+                tourId, dayNumber, sequenceOrder, excludeItineraryId);
     }
 
     private void validateTime(TourItineraryRequestDTO request) {

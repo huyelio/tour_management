@@ -20,4 +20,17 @@ public interface TourItineraryRepository extends JpaRepository<TourItinerary, Lo
     List<TourItinerary> findByTourIdSorted(@Param("tourId") Long tourId);
 
     boolean existsByTourId(Long tourId);
+
+    boolean existsByTourIdAndDayNumberAndSequenceOrder(
+            Long tourId,
+            Integer dayNumber,
+            Integer sequenceOrder
+    );
+
+    boolean existsByTourIdAndDayNumberAndSequenceOrderAndIdNot(
+            Long tourId,
+            Integer dayNumber,
+            Integer sequenceOrder,
+            Long id
+    );
 }

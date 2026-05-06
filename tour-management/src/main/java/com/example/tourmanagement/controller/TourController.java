@@ -29,16 +29,16 @@ public class TourController {
             @RequestParam(required = false) String status
     ) {
         List<TourSummaryDTO> tours;
-        if (keyword != null || status != null) {
-            TourStatus tourStatus = null;
-            if (status != null && !status.isBlank()) {
-                try {
-                    tourStatus = TourStatus.valueOf(status.toUpperCase());
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-            tours = tourService.searchTours(keyword, tourStatus);
-        } else if (activeOnly) {
+        // if (keyword != null || status != null) {
+        //     TourStatus tourStatus = null;
+        //     if (status != null && !status.isBlank()) {
+        //         try {
+        //             tourStatus = TourStatus.valueOf(status.toUpperCase());
+        //         } catch (IllegalArgumentException ignored) {
+        //         }
+        //     }searchTours
+        //     tours = tourService.(keyword, tourStatus);
+        if (activeOnly) {
             tours = tourService.getActiveTours();
         } else {
             tours = tourService.getAllTours();

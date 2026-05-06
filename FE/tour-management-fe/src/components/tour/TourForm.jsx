@@ -106,12 +106,12 @@ const TourForm = ({ tour, onSuccess, onClose }) => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#111827' }}>
-            {isEdit ? '✏️ Sửa tour' : '➕ Thêm tour mới'}
+            {isEdit ? 'Sửa tour' : 'Thêm tour mới'}
           </h2>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#9ca3af', lineHeight: 1 }}
-          >✕</button>
+          >X</button>
         </div>
 
         {error && (

@@ -11,9 +11,9 @@ public interface TourGuideService {
     List<TourGuideDTO> filterGuides(GuideStatus status, String specialization, String language, String region);
 
     /**
-     * Lấy danh sách tất cả HDV (không lọc theo status) kèm thông tin phù hợp
-     * cho tour: cảnh báo trùng lịch, trạng thái không hoạt động.
+     * Lấy danh sách tất cả HDV cho tour (không lọc specialization/language/region/status),
+     * kèm thông tin phù hợp: cảnh báo trùng lịch, trạng thái không hoạt động.
      * HDV phù hợp (eligible=true) xếp lên trước.
      */
-    List<TourGuideDTO> getGuidesForTour(Long tourId, String specialization, String language, String region);
+    List<TourGuideDTO> getGuidesForTour(Long tourId);
 }

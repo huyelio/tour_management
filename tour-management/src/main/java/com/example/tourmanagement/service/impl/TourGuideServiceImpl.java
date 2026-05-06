@@ -48,7 +48,7 @@ public class TourGuideServiceImpl implements TourGuideService {
     }
 
     @Override
-    public List<TourGuideDTO> getGuidesForTour(Long tourId, String specialization, String language, String region) {
+    public List<TourGuideDTO> getGuidesForTour(Long tourId) {
         // 1. Tải tour để lấy khoảng thời gian
         Tour tour = tourRepository.findById(tourId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
@@ -58,8 +58,8 @@ public class TourGuideServiceImpl implements TourGuideService {
                 guideRepository.findGuideIdsWithScheduleOverlap(tour.getStartDate(), tour.getEndDate(), tourId)
         );
 
-        // 3. Lấy tất cả HDV theo bộ lọc (không giới hạn status – trả đủ 2 nhóm)
-        return guideRepository.findByFilters(null, specialization, language, region).stream()
+        // 3. Lấy tất cả HDV (không lọc specialization/language/region/status)
+        return guideRepository.findAll().stream()
                 .map(g -> {
                     String warning = null;
                     if (g.getStatus() == GuideStatus.INACTIVE) {

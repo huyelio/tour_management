@@ -32,12 +32,11 @@ const SORT_OPTIONS = [
 
 // ─── Sub-component: Summary Cards ────────────────────────────────────────────
 
-const SummaryCard = ({ icon, label, value, color }) => (
+const SummaryCard = ({ label, value, color }) => (
   <div style={{
     background: '#fff', borderRadius: '12px', padding: '20px 24px',
     border: `1px solid ${color}33`, flex: 1, minWidth: '160px',
   }}>
-    <div style={{ fontSize: '28px', marginBottom: '6px' }}>{icon}</div>
     <div style={{ fontSize: '22px', fontWeight: 800, color }}>{value}</div>
     <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>{label}</div>
   </div>
@@ -154,7 +153,7 @@ const RevenueReportPage = () => {
       {/* Page Header */}
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ margin: '0 0 6px', fontSize: '24px', fontWeight: 800, color: '#111827' }}>
-          📊 Thống kê doanh thu tour
+          Thống kê doanh thu tour
         </h1>
         <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
           Doanh thu được tính từ các booking có trạng thái <strong>CONFIRMED</strong> hoặc <strong>COMPLETED</strong>.
@@ -210,7 +209,7 @@ const RevenueReportPage = () => {
             border: 'none', borderRadius: '8px', cursor: 'pointer',
             fontSize: '14px', fontWeight: 700,
           }}>
-            🔍 Tìm kiếm
+            Tìm kiếm
           </button>
           <button type="button" onClick={handleReset} style={{
             padding: '9px 20px', background: '#fff', color: '#374151',
@@ -232,19 +231,16 @@ const RevenueReportPage = () => {
           {/* Summary Cards */}
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '24px' }}>
             <SummaryCard
-              icon="💰"
               label="Tổng doanh thu"
               value={formatCurrency(report.summary.totalRevenue)}
               color="#2563eb"
             />
             <SummaryCard
-              icon="👥"
               label="Tổng số khách"
               value={report.summary.totalGuests.toLocaleString('vi-VN') + ' khách'}
               color="#10b981"
             />
             <SummaryCard
-              icon="🗺️"
               label="Tổng số tour"
               value={report.summary.totalTours + ' tour'}
               color="#f59e0b"
@@ -256,7 +252,6 @@ const RevenueReportPage = () => {
               background: '#fff', borderRadius: '12px', padding: '48px',
               border: '1px solid #e5e7eb', textAlign: 'center', color: '#9ca3af',
             }}>
-              <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
               <p style={{ margin: 0, fontSize: '15px' }}>Không có dữ liệu phù hợp với điều kiện lọc.</p>
             </div>
           ) : (
@@ -267,7 +262,7 @@ const RevenueReportPage = () => {
                 border: '1px solid #e5e7eb', marginBottom: '24px',
               }}>
                 <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 700, color: '#111827' }}>
-                  🏆 Top 5 tour doanh thu cao nhất
+                  Top 5 tour doanh thu cao nhất
                 </h3>
                 <RevenueBarChart data={report.tours} />
               </div>
@@ -279,7 +274,7 @@ const RevenueReportPage = () => {
               }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#111827' }}>
-                    📋 Chi tiết doanh thu ({report.tours.length} tour)
+                    Chi tiết doanh thu ({report.tours.length} tour)
                   </h3>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
@@ -316,7 +311,7 @@ const RevenueReportPage = () => {
                             {t.tourName}
                           </td>
                           <td style={{ padding: '12px 16px', color: '#6b7280' }}>
-                            📍 {t.destination}
+                            {t.destination}
                           </td>
                           <td style={{ padding: '12px 16px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                             {formatDate(t.startDate)}

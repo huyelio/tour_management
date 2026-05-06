@@ -44,16 +44,13 @@ public class TourGuideController {
     }
 
     // GET /api/guides/for-tour/{tourId} - Lấy danh sách HDV kèm tính phù hợp cho tour
-    // Trả về TẤT CẢ HDV (không lọc theo status), sắp xếp eligible lên trước,
+    // Trả về TẤT CẢ HDV (không lọc specialization/language/region/status), sắp xếp eligible lên trước,
     // kèm field availabilityWarning và eligible để FE hiển thị 2 nhóm.
     @GetMapping("/for-tour/{tourId}")
     public ResponseEntity<ApiResponse<List<TourGuideDTO>>> getGuidesForTour(
-            @PathVariable Long tourId,
-            @RequestParam(required = false) String specialization,
-            @RequestParam(required = false) String language,
-            @RequestParam(required = false) String region
+            @PathVariable Long tourId
     ) {
-        List<TourGuideDTO> guides = guideService.getGuidesForTour(tourId, specialization, language, region);
+        List<TourGuideDTO> guides = guideService.getGuidesForTour(tourId);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách hướng dẫn viên cho tour thành công", guides));
     }
 }

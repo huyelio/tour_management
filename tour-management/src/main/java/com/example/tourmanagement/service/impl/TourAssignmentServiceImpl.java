@@ -55,23 +55,37 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
     @Override
     @Transactional
     public List<AssignmentDTO> saveAssignments(AssignmentRequestDTO request) {
-        // Bước 1: Tìm và validate tour
-        Tour tour = tourRepository.findById(request.getTourId())
-                .orElseThrow(() -> new ResourceNotFoundException("Tour", request.getTourId()));
+        // Bước 1: Lấy trạng thái tour theo đúng luồng getStatus() -> tourRepository.findById()
+        TourStatus tourStatus = getStatus(request.getTourId());
 
         // Bước 2: Chỉ cho phân công khi tour đang ở trạng thái PLANNING hoặc OPEN
-        if (tour.getStatus() != TourStatus.PLANNING && tour.getStatus() != TourStatus.OPEN) {
-            String statusLabel = switch (tour.getStatus()) {
-                case FULL      -> "đã đủ khách";
-                case ONGOING   -> "đang diễn ra";
-                case COMPLETED -> "đã hoàn thành";
-                case CANCELLED -> "đã hủy";
-                default        -> "không hợp lệ để phân công";
-            };
+        if (tourStatus != TourStatus.PLANNING && tourStatus != TourStatus.OPEN) {
+            String statusLabel;
+            switch (tourStatus) {
+                case FULL:
+                    statusLabel = "đã đủ khách";
+                    break;
+                case ONGOING:
+                    statusLabel = "đang diễn ra";
+                    break;
+                case COMPLETED:
+                    statusLabel = "đã hoàn thành";
+                    break;
+                case CANCELLED:
+                    statusLabel = "đã hủy";
+                    break;
+                default:
+                    statusLabel = "không hợp lệ để phân công";
+                    break;
+            }
             throw new BusinessException(
                 "Không thể phân công hướng dẫn viên: tour đang ở trạng thái '" + statusLabel + "'"
             );
         }
+
+        // Lấy tour để dùng cho các bước tiếp theo (trùng lịch, tồn tại phân công, save)
+        Tour tour = tourRepository.findById(request.getTourId())
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", request.getTourId()));
 
         List<TourAssignment> savedAssignments = new ArrayList<>();
 
@@ -124,7 +138,7 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
                     .role(item.getRole() != null ? item.getRole() : "LEAD")
                     .note(item.getNote())
                     .status(AssignmentStatus.ASSIGNED)
-                    .assignedBy("admin") // TODO: lấy từ security context sau khi thêm auth
+                    .assignedBy("admin") 
                     .build();
 
             savedAssignments.add(assignmentRepository.save(assignment));
@@ -161,6 +175,16 @@ public class TourAssignmentServiceImpl implements TourAssignmentService {
             tourRepository.save(tour);
             log.info("Tour '{}' đã đủ hướng dẫn viên, cập nhật trạng thái → OPEN", tour.getName());
         }
+    }
+
+    /**
+     * Luồng kiểm tra trạng thái tour:
+     * TourAssignmentServiceImpl -> getStatus() -> TourRepository.findById()
+     */
+    private TourStatus getStatus(Long tourId) {
+        return tourRepository.findById(tourId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId))
+                .getStatus();
     }
 
     private AssignmentDTO toDTO(TourAssignment a) {
